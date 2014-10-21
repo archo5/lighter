@@ -60,6 +60,7 @@ typedef struct ltr_MeshPartInfo
 	u32* indices;
 	u32 vertex_count;
 	u32 index_count;
+	int tristrip;
 }
 ltr_MeshPartInfo;
 
@@ -108,7 +109,7 @@ LTRAPI LTRCODE ltr_DoWork( ltr_Scene* scene, ltr_WorkInfo* info );
 
 // - data input
 LTRAPI ltr_Mesh* ltr_CreateMesh( ltr_Scene* scene, const char* ident, size_t ident_size );
-LTRAPI void ltr_MeshAddPart( ltr_Mesh* mesh, ltr_MeshPartInfo* mpinfo );
+LTRAPI LTRBOOL ltr_MeshAddPart( ltr_Mesh* mesh, ltr_MeshPartInfo* mpinfo );
 LTRAPI LTRBOOL ltr_MeshAddInstance( ltr_Mesh* mesh, ltr_MeshInstanceInfo* mii );
 LTRAPI void ltr_LightAdd( ltr_Scene* scene, ltr_LightInfo* li );
 

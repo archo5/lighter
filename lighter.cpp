@@ -1,6 +1,6 @@
 
 
-#include "lighter_int.h"
+#include "lighter_int.hpp"
 
 
 struct ltr_MeshPart
@@ -9,6 +9,7 @@ struct ltr_MeshPart
 	u32 m_vertexOffset;
 	u32 m_indexCount;
 	u32 m_indexOffset;
+	int m_tristrip;
 };
 typedef std::vector< ltr_MeshPart > MeshPartVector;
 
@@ -37,6 +38,8 @@ struct ltr_MeshInstance
 	
 	// tmp
 	Vec3Vector m_vpos;
+	Vec3Vector m_vnrm;
+	Vec2Vector m_ltex;
 	
 	// output
 	Vec3Vector m_samples_pos;
@@ -44,19 +47,29 @@ struct ltr_MeshInstance
 	U32Vector m_samples_loc;
 	Vec3Vector m_lightmap;
 };
-typedef std::vector< ltr_MeshInstance > MeshInstVector;
+typedef std::vector< ltr_MeshInstance* > MeshInstPtrVector;
 
 struct ltr_Scene
 {
-	ltr_Scene() : m_workType( LTR_WT_COLINFO ), m_workPart( 0 ){}
+	ltr_Scene() : m_workType( LTR_WT_PREXFORM ), m_workPart( 0 ){}
+	~ltr_Scene()
+	{
+		for( size_t i = 0; i < m_meshInstances.size(); ++i )
+			delete m_meshInstances[i];
+		for( size_t i = 0; i < m_meshes.size(); ++i )
+			delete m_meshes[i];
+	}
 	
 	void DoWork();
 	LTRCODE Advance();
+	void RasterizeInstance( ltr_MeshInstance* mi, float margin );
 	
 	MeshPtrVector m_meshes;
-	MeshInstVector m_meshInstances;
+	MeshInstPtrVector m_meshInstances;
 	LightVector m_lights;
 	
+	Vec3Vector m_tmpRender1;
+	Vec3Vector m_tmpRender2;
 	WorkOutputVector m_workOutput;
 	
 	u32 m_workType;
@@ -74,16 +87,91 @@ void ltr_DestroyScene( ltr_Scene* scene )
 	delete scene;
 }
 
+void ltr_Scene::RasterizeInstance( ltr_MeshInstance* mi, float margin )
+{
+	ltr_Mesh* mesh = mi->mesh;
+	for( u32 part = 0; part < mesh->m_parts.size(); ++part )
+	{
+		const ltr_MeshPart& mp = mesh->m_parts[ part ];
+		if( mp.m_tristrip )
+		{
+			for( u32 tri = 2; tri < mp.m_indexCount; ++tri )
+			{
+				u32 tridx1 = tri, tridx2 = tri + 1 + tri % 2, tridx3 = tri + 2 - tri % 2;
+				RasterizeTriangle2D_x2_ex
+				(
+					&m_tmpRender1[0], &m_tmpRender2[0], mi->lm_width, mi->lm_height, margin,
+					mi->m_ltex[ tridx1 ], mi->m_ltex[ tridx2 ], mi->m_ltex[ tridx3 ],
+					mi->m_vpos[ tridx1 ], mi->m_vpos[ tridx2 ], mi->m_vpos[ tridx3 ],
+					mi->m_vnrm[ tridx1 ], mi->m_vnrm[ tridx2 ], mi->m_vnrm[ tridx3 ]
+				);
+			}
+		}
+		else
+		{
+			for( u32 tri = 0; tri < mp.m_indexCount; tri += 3 )
+			{
+				u32 tridx1 = tri, tridx2 = tri + 1, tridx3 = tri + 2;
+				RasterizeTriangle2D_x2_ex
+				(
+					&m_tmpRender1[0], &m_tmpRender2[0], mi->lm_width, mi->lm_height, margin,
+					mi->m_ltex[ tridx1 ], mi->m_ltex[ tridx2 ], mi->m_ltex[ tridx3 ],
+					mi->m_vpos[ tridx1 ], mi->m_vpos[ tridx2 ], mi->m_vpos[ tridx3 ],
+					mi->m_vnrm[ tridx1 ], mi->m_vnrm[ tridx2 ], mi->m_vnrm[ tridx3 ]
+				);
+			}
+		}
+	}
+}
+
 void ltr_Scene::DoWork()
 {
 	switch( m_workType )
 	{
+	case LTR_WT_PREXFORM:
+		{
+			ltr_MeshInstance* mi = m_meshInstances[ m_workPart ];
+			ltr_Mesh* mesh = mi->mesh;
+			
+			mi->m_vpos.resize( mesh->m_vpos.size() );
+			mi->m_vnrm.resize( mesh->m_vnrm.size() );
+			mi->m_ltex.resize( mesh->m_vtex2.size() );
+			
+			TransformPositions( &mi->m_vpos[0], &mesh->m_vpos[0], mesh->m_vpos.size(), mi->matrix );
+			TransformNormals( &mi->m_vnrm[0], &mesh->m_vnrm[0], mesh->m_vnrm.size(), mi->matrix );
+			
+			Vec2 lsize = Vec2::Create( mi->lm_width, mi->lm_height );
+			for( size_t i = 0; i < mi->m_ltex.size(); ++i )
+				mi->m_ltex[ i ] = mesh->m_vtex2[ i ] * lsize;
+		}
+		break;
+		
 	case LTR_WT_COLINFO:
 		break;
+		
 	case LTR_WT_SAMPLES:
+		{
+			ltr_MeshInstance* mi = m_meshInstances[ m_workPart ];
+			
+			if( m_tmpRender1.size() < mi->lm_width * mi->lm_height )
+				m_tmpRender1.resize( mi->lm_width * mi->lm_height );
+			if( m_tmpRender2.size() < mi->lm_width * mi->lm_height )
+				m_tmpRender2.resize( mi->lm_width * mi->lm_height );
+			
+			TMEMSET( &m_tmpRender1[0], m_tmpRender1.size(), Vec3::Create(0) );
+			TMEMSET( &m_tmpRender2[0], m_tmpRender2.size(), Vec3::Create(0) );
+			
+			// first do excessive rasterization
+			RasterizeInstance( mi, 1.0f );
+			
+			// then do proper rasterization
+			RasterizeInstance( mi, 0.0f );
+		}
 		break;
+		
 	case LTR_WT_LMRENDER:
 		break;
+		
 	case LTR_WT_FINALIZE:
 		break;
 	}
@@ -116,6 +204,10 @@ LTRCODE ltr_DoWork( ltr_Scene* scene, ltr_WorkInfo* info )
 	info->part = scene->m_workPart;
 	switch( scene->m_workType )
 	{
+	case LTR_WT_PREXFORM:
+		info->stage = "transforming spatial data";
+		info->item_count = scene->m_meshInstances.size();
+		break;
 	case LTR_WT_COLINFO:
 		info->stage = "generating data structures";
 		info->item_count = scene->m_meshInstances.size();
@@ -151,9 +243,19 @@ ltr_Mesh* ltr_CreateMesh( ltr_Scene* scene, const char* ident, size_t ident_size
 	return mesh;
 }
 
-void ltr_MeshAddPart( ltr_Mesh* mesh, ltr_MeshPartInfo* mpinfo )
+LTRBOOL ltr_MeshAddPart( ltr_Mesh* mesh, ltr_MeshPartInfo* mpinfo )
 {
-	ltr_MeshPart mp = { mpinfo->vertex_count, (u32) mesh->m_vpos.size(), mpinfo->index_count, (u32) mesh->m_indices.size() };
+	ltr_MeshPart mp =
+	{
+		mpinfo->vertex_count,
+		(u32) mesh->m_vpos.size(),
+		mpinfo->index_count,
+		(u32) mesh->m_indices.size(),
+		mpinfo->tristrip
+	};
+	
+	if( mpinfo->index_count < 3 && ( mpinfo->tristrip || mpinfo->index_count % 3 != 0 ) )
+		return 0;
 	
 	size_t newsize = mesh->m_vpos.size() + mpinfo->vertex_count;
 	mesh->m_vpos.resize( newsize );
@@ -178,13 +280,14 @@ void ltr_MeshAddPart( ltr_Mesh* mesh, ltr_MeshPartInfo* mpinfo )
 	memcpy( iptr, mpinfo->indices, sizeof(*iptr) * mpinfo->index_count );
 	
 	mesh->m_parts.push_back( mp );
+	return 1;
 }
 
 LTRBOOL ltr_MeshAddInstance( ltr_Mesh* mesh, ltr_MeshInstanceInfo* mii )
 {
-	ltr_MeshInstance mi;
-	mi.mesh = mesh;
-	memcpy( mi.matrix.a, mii->matrix, sizeof(Mat4) );
+	ltr_MeshInstance* mi = new ltr_MeshInstance;
+	mi->mesh = mesh;
+	memcpy( mi->matrix.a, mii->matrix, sizeof(Mat4) );
 	mesh->m_scene->m_meshInstances.push_back( mi );
 	return 1;
 }
@@ -206,52 +309,6 @@ LTRBOOL ltr_GetWorkOutput( ltr_Scene* scene, i32 which, ltr_WorkOutput* wout )
 		return 0;
 	*wout = scene->m_workOutput[ which ];
 	return 1;
-}
-
-
-
-//
-// RASTERIZATION
-//
-// - p1, p2, p3 - in image space
-//
-void RasterizeTriangle2D( Vec3* image, i32 width, i32 height, const Vec2& p1, const Vec2& p2, const Vec2& p3, const Vec3& va1, const Vec3& va2, const Vec3& va3 )
-{
-	i32 maxX = TMAX( p1.x, TMAX( p2.x, p3.x ) );
-	i32 minX = TMIN( p1.x, TMIN( p2.x, p3.x ) );
-	i32 maxY = TMAX( p1.y, TMAX( p2.y, p3.y ) );
-	i32 minY = TMIN( p1.y, TMIN( p2.y, p3.y ) );
-	
-	if( maxX < 0 || minX >= width || maxY < 0 || minY >= height )
-		return;
-	if( maxX < 0 ) maxX = 0;
-	if( minX >= width ) minX = width - 1;
-	if( maxY < 0 ) maxY = 0;
-	if( minY >= height ) minY = height - 1;
-	
-	Vec2 p1p2 = p2 - p1;
-	Vec2 p1p3 = p3 - p1;
-	float vcross = Vec2CrossProduct( p1p2, p1p3 );
-	if( vcross == 0 )
-		return;
-	
-	Vec3 va1va2 = va2 - va1, va1va3 = va3 - va1;
-	
-	for( i32 x = minX; x <= maxX; x++ )
-	{
-		for( i32 y = minY; y <= maxY; y++ )
-		{
-			Vec2 q = { x - p1.x, y - p1.y };
-			
-			float s = Vec2CrossProduct( q, p1p3 ) / vcross;
-			float t = Vec2CrossProduct( p1p2, q ) / vcross;
-			
-			if( ( s >= 0 ) && ( t >= 0 ) && ( s + t <= 1 ) )
-			{
-				image[ x + width * y ] = va1 + va1va2 * s + va1va3 * t;
-			}
-		}
-	}
 }
 
 
