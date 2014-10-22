@@ -17,6 +17,16 @@
 #endif
 
 
+#define SMALL_FLOAT 0.001f
+
+// #define LTR_DEBUG 1
+#ifdef LTR_DEBUG
+#define DBG( x ) x
+#else
+#define DBG( x )
+#endif
+
+
 #define LTR_WT_PREXFORM 0 // transform positions/normals for instances
 #define LTR_WT_COLINFO  1 // generate collision info (* mesh)
 #define LTR_WT_SAMPLES  2 // gather sampled information to compact position/normal/index arrays, allocate color arrays (* mesh)
@@ -75,8 +85,9 @@ struct Vec3
 {
 	float x, y, z;
 	
-	static Vec3 Create( float x ){ Vec3 v = { x, x, x }; return v; }
-	static Vec3 Create( float x, float y, float z ){ Vec3 v = { x, y, z }; return v; }
+	static FORCEINLINE Vec3 Create( float x ){ Vec3 v = { x, x, x }; return v; }
+	static FORCEINLINE Vec3 Create( float x, float y, float z ){ Vec3 v = { x, y, z }; return v; }
+	static FORCEINLINE Vec3 CreateFromPtr( const float* x ){ Vec3 v = { x[0], x[1], x[2] }; return v; }
 	
 	FORCEINLINE Vec3 operator + () const { return *this; }
 	FORCEINLINE Vec3 operator - () const { Vec3 v = { -x, -y, -z }; return v; }
@@ -188,7 +199,6 @@ typedef std::vector< float > FloatVector;
 typedef std::vector< Vec2 > Vec2Vector;
 typedef std::vector< Vec3 > Vec3Vector;
 typedef std::vector< Mat4 > Mat4Vector;
-typedef std::vector< ltr_LightInfo > LightVector;
 typedef std::vector< ltr_WorkOutput > WorkOutputVector;
 
 

@@ -73,11 +73,13 @@ ltr_MeshInstanceInfo;
 
 typedef struct ltr_LightInfo
 {
-	u32 light_type;
+	u32 type;
 	ltr_VEC3 position;
 	ltr_VEC3 direction;
 	ltr_VEC3 up_direction;
 	ltr_VEC3 color_rgb;
+	float range;
+	float power;
 }
 ltr_LightInfo;
 
@@ -89,12 +91,12 @@ ltr_WorkOutputInfo;
 
 typedef struct ltr_WorkOutput
 {
-	i32 uid;
+	u32 uid;
 	const char* ident;
 	size_t ident_size;
 	float* lightmap_rgb;
-	i32 width;
-	i32 height;
+	u32 width;
+	u32 height;
 }
 ltr_WorkOutput;
 

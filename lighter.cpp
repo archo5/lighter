@@ -49,6 +49,19 @@ struct ltr_MeshInstance
 };
 typedef std::vector< ltr_MeshInstance* > MeshInstPtrVector;
 
+typedef struct ltr_Light
+{
+	u32 type;
+	Vec3 position;
+	Vec3 direction;
+	Vec3 up_direction;
+	Vec3 color_rgb;
+	float range;
+	float power;
+}
+ltr_Light;
+typedef std::vector< ltr_Light > LightVector;
+
 struct ltr_Scene
 {
 	ltr_Scene() : m_workType( LTR_WT_PREXFORM ), m_workPart( 0 ){}
@@ -63,6 +76,7 @@ struct ltr_Scene
 	void DoWork();
 	LTRCODE Advance();
 	void RasterizeInstance( ltr_MeshInstance* mi, float margin );
+	float VisibilityTest( const Vec3& A, const Vec3& B );
 	
 	MeshPtrVector m_meshes;
 	MeshInstPtrVector m_meshInstances;
@@ -70,6 +84,7 @@ struct ltr_Scene
 	
 	Vec3Vector m_tmpRender1;
 	Vec3Vector m_tmpRender2;
+	BSPTree m_triTree;
 	WorkOutputVector m_workOutput;
 	
 	u32 m_workType;
@@ -98,6 +113,9 @@ void ltr_Scene::RasterizeInstance( ltr_MeshInstance* mi, float margin )
 			for( u32 tri = 2; tri < mp.m_indexCount; ++tri )
 			{
 				u32 tridx1 = tri, tridx2 = tri + 1 + tri % 2, tridx3 = tri + 2 - tri % 2;
+				tridx1 = mesh->m_indices[ tridx1 ];
+				tridx2 = mesh->m_indices[ tridx2 ];
+				tridx3 = mesh->m_indices[ tridx3 ];
 				RasterizeTriangle2D_x2_ex
 				(
 					&m_tmpRender1[0], &m_tmpRender2[0], mi->lm_width, mi->lm_height, margin,
@@ -112,6 +130,9 @@ void ltr_Scene::RasterizeInstance( ltr_MeshInstance* mi, float margin )
 			for( u32 tri = 0; tri < mp.m_indexCount; tri += 3 )
 			{
 				u32 tridx1 = tri, tridx2 = tri + 1, tridx3 = tri + 2;
+				tridx1 = mesh->m_indices[ tridx1 ];
+				tridx2 = mesh->m_indices[ tridx2 ];
+				tridx3 = mesh->m_indices[ tridx3 ];
 				RasterizeTriangle2D_x2_ex
 				(
 					&m_tmpRender1[0], &m_tmpRender2[0], mi->lm_width, mi->lm_height, margin,
@@ -122,6 +143,18 @@ void ltr_Scene::RasterizeInstance( ltr_MeshInstance* mi, float margin )
 			}
 		}
 	}
+}
+
+float ltr_Scene::VisibilityTest( const Vec3& A, const Vec3& B )
+{
+	Vec3 diffnorm = ( B - A ).Normalized();
+	Vec3 mA = A + diffnorm * SMALL_FLOAT;
+	Vec3 mB = B - diffnorm * SMALL_FLOAT;
+	
+	float hit = m_triTree.IntersectRay( mA, mB );
+	if( hit < 1.0f )
+		return 0.0f;
+	return 1.0f;
 }
 
 void ltr_Scene::DoWork()
@@ -147,6 +180,39 @@ void ltr_Scene::DoWork()
 		break;
 		
 	case LTR_WT_COLINFO:
+		{
+			ltr_MeshInstance* mi = m_meshInstances[ m_workPart ];
+			ltr_Mesh* mesh = mi->mesh;
+			
+			for( u32 part = 0; part < mesh->m_parts.size(); ++part )
+			{
+				const ltr_MeshPart& mp = mesh->m_parts[ part ];
+				if( mp.m_tristrip )
+				{
+					for( u32 tri = 2; tri < mp.m_indexCount; ++tri )
+					{
+						u32 tridx1 = tri, tridx2 = tri + 1 + tri % 2, tridx3 = tri + 2 - tri % 2;
+						tridx1 = mesh->m_indices[ tridx1 ];
+						tridx2 = mesh->m_indices[ tridx2 ];
+						tridx3 = mesh->m_indices[ tridx3 ];
+						BSPTriangle T = { mi->m_vpos[ tridx1 ], mi->m_vpos[ tridx2 ], mi->m_vpos[ tridx3 ] };
+						m_triTree.AddTriangle( &T );
+					}
+				}
+				else
+				{
+					for( u32 tri = 0; tri < mp.m_indexCount; tri += 3 )
+					{
+						u32 tridx1 = tri, tridx2 = tri + 1, tridx3 = tri + 2;
+						tridx1 = mesh->m_indices[ tridx1 ];
+						tridx2 = mesh->m_indices[ tridx2 ];
+						tridx3 = mesh->m_indices[ tridx3 ];
+						BSPTriangle T = { mi->m_vpos[ tridx1 ], mi->m_vpos[ tridx2 ], mi->m_vpos[ tridx3 ] };
+						m_triTree.AddTriangle( &T );
+					}
+				}
+			}
+		}
 		break;
 		
 	case LTR_WT_SAMPLES:
@@ -166,13 +232,74 @@ void ltr_Scene::DoWork()
 			
 			// then do proper rasterization
 			RasterizeInstance( mi, 0.0f );
+			
+			// compress samples to packed array
+			u32 sample_count = 0;
+			for( size_t i = 0; i < m_tmpRender2.size(); ++i )
+			{
+				Vec3& N = m_tmpRender2[ i ];
+				if( !N.IsZero() )
+					sample_count++;
+			}
+			mi->m_samples_pos.reserve( sample_count );
+			mi->m_samples_nrm.reserve( sample_count );
+			mi->m_samples_loc.reserve( sample_count );
+			for( size_t i = 0; i < m_tmpRender2.size(); ++i )
+			{
+				mi->m_samples_pos.push_back( m_tmpRender1[ i ] );
+				mi->m_samples_nrm.push_back( m_tmpRender2[ i ] );
+				mi->m_samples_loc.push_back( i );
+			}
+			mi->m_lightmap.resize( sample_count );
 		}
 		break;
 		
 	case LTR_WT_LMRENDER:
+		{
+			size_t mi_id = m_workPart / m_lights.size();
+			size_t light_id = m_workPart % m_lights.size();
+			
+			ltr_MeshInstance* mi = m_meshInstances[ mi_id ];
+			ltr_Light& light = m_lights[ light_id ];
+			
+			if( light.type == LTR_LT_POINT )
+			{
+				for( size_t i = 0; i < mi->m_lightmap.size(); ++i )
+				{
+					Vec3& SP = mi->m_samples_pos[ i ];
+					Vec3& SN = mi->m_samples_nrm[ i ];
+					Vec3 sample2light = light.position - SP;
+					float dist = sample2light.Length();
+					if( dist )
+						sample2light /= dist;
+					float f_dist = pow( 1 - TMIN( 1.0f, dist / light.range ), light.power );
+					float f_ndotl = TMAX( 0.0f, Vec3Dot( sample2light, SN ) );
+					if( f_dist * f_ndotl < SMALL_FLOAT )
+						continue;
+					float f_vistest = VisibilityTest( SP, light.position );
+					mi->m_lightmap[ i ] += light.color_rgb * ( f_dist * f_ndotl * f_vistest );
+				}
+			}
+		}
 		break;
 		
 	case LTR_WT_FINALIZE:
+		{
+			ltr_MeshInstance* mi = m_meshInstances[ m_workPart ];
+			ltr_Mesh* mesh = mi->mesh;
+			
+			ltr_WorkOutput wo =
+			{
+				m_workPart,
+				mesh->m_ident.c_str(),
+				mesh->m_ident.size(),
+				/* TODO */ NULL,
+				mi->lm_width,
+				mi->lm_height
+			};
+			
+			m_workOutput.push_back( wo );
+		}
 		break;
 	}
 }
@@ -294,7 +421,17 @@ LTRBOOL ltr_MeshAddInstance( ltr_Mesh* mesh, ltr_MeshInstanceInfo* mii )
 
 void ltr_LightAdd( ltr_Scene* scene, ltr_LightInfo* li )
 {
-	scene->m_lights.push_back( *li );
+	ltr_Light L =
+	{
+		li->type,
+		Vec3::CreateFromPtr( li->position ),
+		Vec3::CreateFromPtr( li->direction ),
+		Vec3::CreateFromPtr( li->up_direction ),
+		Vec3::CreateFromPtr( li->color_rgb ),
+		li->range,
+		li->power
+	};
+	scene->m_lights.push_back( L );
 }
 
 
