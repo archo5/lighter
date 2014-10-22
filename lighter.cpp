@@ -32,6 +32,7 @@ struct ltr_MeshInstance
 {
 	// input
 	ltr_Mesh* mesh;
+	std::string m_ident;
 	Mat4 matrix;
 	u32 lm_width;
 	u32 lm_height;
@@ -58,6 +59,9 @@ typedef struct ltr_Light
 	Vec3 color_rgb;
 	float range;
 	float power;
+	float light_radius;
+	int shadow_sample_count;
+	Vec3Vector sample_positions;
 }
 ltr_Light;
 typedef std::vector< ltr_Light > LightVector;
@@ -71,12 +75,14 @@ struct ltr_Scene
 			delete m_meshInstances[i];
 		for( size_t i = 0; i < m_meshes.size(); ++i )
 			delete m_meshes[i];
+		for( size_t i = 0; i < m_workOutput.size(); ++i )
+			delete [] m_workOutput[i].lightmap_rgb;
 	}
 	
 	void DoWork();
 	LTRCODE Advance();
 	void RasterizeInstance( ltr_MeshInstance* mi, float margin );
-	float VisibilityTest( const Vec3& A, const Vec3& B );
+	float VisibilityTest( const Vec3& A, ltr_Light* light );
 	
 	MeshPtrVector m_meshes;
 	MeshInstPtrVector m_meshInstances;
@@ -145,20 +151,28 @@ void ltr_Scene::RasterizeInstance( ltr_MeshInstance* mi, float margin )
 	}
 }
 
-float ltr_Scene::VisibilityTest( const Vec3& A, const Vec3& B )
+float ltr_Scene::VisibilityTest( const Vec3& A, ltr_Light* light )
 {
-	Vec3 diffnorm = ( B - A ).Normalized();
-	Vec3 mA = A + diffnorm * SMALL_FLOAT;
-	Vec3 mB = B - diffnorm * SMALL_FLOAT;
-	
-	float hit = m_triTree.IntersectRay( mA, mB );
-	if( hit < 1.0f )
-		return 0.0f;
-	return 1.0f;
+	int count = 0;
+	for( size_t i = 0; i < light->sample_positions.size(); ++i )
+	{
+		const Vec3& B = light->sample_positions[ i ];
+		Vec3 diffnorm = ( B - A ).Normalized();
+		Vec3 mA = A + diffnorm * SMALL_FLOAT;
+		Vec3 mB = B - diffnorm * SMALL_FLOAT;
+		
+		float hit = m_triTree.IntersectRay( mA, mB );
+		if( hit < 1.0f )
+			count++;
+	}
+	return 1.0f - (float) count / (float) light->sample_positions.size();
 }
 
 void ltr_Scene::DoWork()
 {
+	if( !m_meshInstances.size() || !m_lights.size() )
+		return;
+	
 	switch( m_workType )
 	{
 	case LTR_WT_PREXFORM:
@@ -175,7 +189,7 @@ void ltr_Scene::DoWork()
 			
 			Vec2 lsize = Vec2::Create( mi->lm_width, mi->lm_height );
 			for( size_t i = 0; i < mi->m_ltex.size(); ++i )
-				mi->m_ltex[ i ] = mesh->m_vtex2[ i ] * lsize;
+				mi->m_ltex[ i ] = mesh->m_vtex2[ i ] * lsize - Vec2::Create(0.5f);
 		}
 		break;
 		
@@ -246,9 +260,13 @@ void ltr_Scene::DoWork()
 			mi->m_samples_loc.reserve( sample_count );
 			for( size_t i = 0; i < m_tmpRender2.size(); ++i )
 			{
-				mi->m_samples_pos.push_back( m_tmpRender1[ i ] );
-				mi->m_samples_nrm.push_back( m_tmpRender2[ i ] );
-				mi->m_samples_loc.push_back( i );
+				Vec3& N = m_tmpRender2[ i ];
+				if( !N.IsZero() )
+				{
+					mi->m_samples_pos.push_back( m_tmpRender1[ i ] );
+					mi->m_samples_nrm.push_back( N );
+					mi->m_samples_loc.push_back( i );
+				}
 			}
 			mi->m_lightmap.resize( sample_count );
 		}
@@ -276,7 +294,7 @@ void ltr_Scene::DoWork()
 					float f_ndotl = TMAX( 0.0f, Vec3Dot( sample2light, SN ) );
 					if( f_dist * f_ndotl < SMALL_FLOAT )
 						continue;
-					float f_vistest = VisibilityTest( SP, light.position );
+					float f_vistest = VisibilityTest( SP, &light );
 					mi->m_lightmap[ i ] += light.color_rgb * ( f_dist * f_ndotl * f_vistest );
 				}
 			}
@@ -288,12 +306,25 @@ void ltr_Scene::DoWork()
 			ltr_MeshInstance* mi = m_meshInstances[ m_workPart ];
 			ltr_Mesh* mesh = mi->mesh;
 			
+			float* image_rgb = new float[ mi->lm_width * mi->lm_height * 3 ];
+			TMEMSET( image_rgb, mi->lm_width * mi->lm_height * 3, 0.0f );
+			for( size_t i = 0; i < mi->m_samples_loc.size(); ++i )
+			{
+				size_t loc = mi->m_samples_loc[ i ] * 3;
+				Vec3& LMC = mi->m_lightmap[ i ];
+				image_rgb[ loc+0 ] = LMC.x;
+				image_rgb[ loc+1 ] = LMC.y;
+				image_rgb[ loc+2 ] = LMC.z;
+			}
+			
 			ltr_WorkOutput wo =
 			{
 				m_workPart,
 				mesh->m_ident.c_str(),
 				mesh->m_ident.size(),
-				/* TODO */ NULL,
+				mi->m_ident.c_str(),
+				mi->m_ident.size(),
+				image_rgb,
 				mi->lm_width,
 				mi->lm_height
 			};
@@ -306,16 +337,16 @@ void ltr_Scene::DoWork()
 
 LTRCODE ltr_Scene::Advance()
 {
-	if( m_workType == LTR_WT_FINALIZE && m_workPart == m_meshInstances.size() )
-		return LTRC_ATEND;
-	
 	u32 count = m_meshInstances.size();
 	if( m_workType == LTR_WT_LMRENDER )
 		count *= m_lights.size();
 	
 	m_workPart++;
-	if( m_workPart == count )
+	if( m_workPart >= count )
 	{
+		if( m_workType == LTR_WT_FINALIZE && m_workPart >= m_meshInstances.size() )
+			return LTRC_ATEND;
+		
 		m_workType++;
 		m_workPart = 0;
 	}
@@ -353,7 +384,7 @@ LTRCODE ltr_DoWork( ltr_Scene* scene, ltr_WorkInfo* info )
 		break;
 	default:
 		info->stage = "unknown";
-		info->item_count = 0;
+		info->item_count = 1;
 		break;
 	}
 	
@@ -414,8 +445,12 @@ LTRBOOL ltr_MeshAddInstance( ltr_Mesh* mesh, ltr_MeshInstanceInfo* mii )
 {
 	ltr_MeshInstance* mi = new ltr_MeshInstance;
 	mi->mesh = mesh;
+	if( mii->ident )
+		mi->m_ident.assign( mii->ident, mii->ident_size );
 	memcpy( mi->matrix.a, mii->matrix, sizeof(Mat4) );
 	mesh->m_scene->m_meshInstances.push_back( mi );
+	mi->lm_width = 256; // TODO: configurable
+	mi->lm_height = 256;
 	return 1;
 }
 
@@ -429,20 +464,26 @@ void ltr_LightAdd( ltr_Scene* scene, ltr_LightInfo* li )
 		Vec3::CreateFromPtr( li->up_direction ),
 		Vec3::CreateFromPtr( li->color_rgb ),
 		li->range,
-		li->power
+		li->power,
+		li->light_radius,
+		TMAX( 1, li->shadow_sample_count ),
+		Vec3Vector()
 	};
+	L.sample_positions.resize( L.shadow_sample_count );
+	for( int i = 0; i < L.shadow_sample_count; ++i )
+		L.sample_positions[ i ] = L.position + Vec3::CreateRandomVector( li->light_radius );
 	scene->m_lights.push_back( L );
 }
 
 
 void ltr_GetWorkOutputInfo( ltr_Scene* scene, ltr_WorkOutputInfo* woutinfo )
 {
-	woutinfo->lightmap_count = (i32) scene->m_workOutput.size();
+	woutinfo->lightmap_count = scene->m_workOutput.size();
 }
 
-LTRBOOL ltr_GetWorkOutput( ltr_Scene* scene, i32 which, ltr_WorkOutput* wout )
+LTRBOOL ltr_GetWorkOutput( ltr_Scene* scene, u32 which, ltr_WorkOutput* wout )
 {
-	if( which < 0 || which >= (i32) scene->m_workOutput.size() )
+	if( which < 0 || which >= scene->m_workOutput.size() )
 		return 0;
 	*wout = scene->m_workOutput[ which ];
 	return 1;

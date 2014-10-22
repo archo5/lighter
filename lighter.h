@@ -68,6 +68,8 @@ typedef struct ltr_MeshInstanceInfo
 {
 	ltr_MAT4 matrix;
 	float importance;
+	const char* ident;
+	size_t ident_size;
 }
 ltr_MeshInstanceInfo;
 
@@ -80,20 +82,24 @@ typedef struct ltr_LightInfo
 	ltr_VEC3 color_rgb;
 	float range;
 	float power;
+	float light_radius;
+	int shadow_sample_count;
 }
 ltr_LightInfo;
 
 typedef struct ltr_WorkOutputInfo
 {
-	i32 lightmap_count;
+	u32 lightmap_count;
 }
 ltr_WorkOutputInfo;
 
 typedef struct ltr_WorkOutput
 {
 	u32 uid;
-	const char* ident;
-	size_t ident_size;
+	const char* mesh_ident;
+	size_t mesh_ident_size;
+	const char* inst_ident;
+	size_t inst_ident_size;
 	float* lightmap_rgb;
 	u32 width;
 	u32 height;
@@ -117,7 +123,7 @@ LTRAPI void ltr_LightAdd( ltr_Scene* scene, ltr_LightInfo* li );
 
 // - data output
 LTRAPI void ltr_GetWorkOutputInfo( ltr_Scene* scene, ltr_WorkOutputInfo* woutinfo );
-LTRAPI LTRBOOL ltr_GetWorkOutput( ltr_Scene* scene, i32 which, ltr_WorkOutput* wout );
+LTRAPI LTRBOOL ltr_GetWorkOutput( ltr_Scene* scene, u32 which, ltr_WorkOutput* wout );
 
 
 #ifdef __cplusplus

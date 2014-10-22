@@ -34,6 +34,9 @@
 #define LTR_WT_FINALIZE 4 // push sample data back to lightmaps (* mesh)
 
 
+FORCEINLINE float randf(){ return (float) rand() / (float) RAND_MAX; }
+
+
 template< class T > T TMIN( const T& a, const T& b ){ return a < b ? a : b; }
 template< class T > T TMAX( const T& a, const T& b ){ return a > b ? a : b; }
 template< class T > void TMEMSET( T* a, size_t c, const T& v )
@@ -41,6 +44,7 @@ template< class T > void TMEMSET( T* a, size_t c, const T& v )
 	for( size_t i = 0; i < c; ++i )
 		a[ i ] = v;
 }
+template< class T, class S > T TLERP( const T& a, const T& b, const S& s ){ return a * ( S(1) - s ) + b * s; }
 
 
 struct Vec2
@@ -73,7 +77,15 @@ struct Vec2
 	FORCEINLINE Vec2& operator *= ( float f ){ x *= f; y *= f; return *this; }
 	FORCEINLINE Vec2& operator /= ( float f ){ x /= f; y /= f; return *this; }
 	
+	FORCEINLINE bool operator == ( const Vec2& o ) const { return x == o.x && y == o.y; }
+	FORCEINLINE bool operator != ( const Vec2& o ) const { return x != o.x || y != o.y; }
+	
 	FORCEINLINE float Length() const { return sqrtf( x * x + y * y ); }
+	
+	void Dump( FILE* f ) const
+	{
+		fprintf( f, "Vec2 ( %.2f %.2f )\n", x, y );
+	}
 };
 
 FORCEINLINE float Vec2Cross( const Vec2& v1, const Vec2& v2 )
@@ -88,6 +100,16 @@ struct Vec3
 	static FORCEINLINE Vec3 Create( float x ){ Vec3 v = { x, x, x }; return v; }
 	static FORCEINLINE Vec3 Create( float x, float y, float z ){ Vec3 v = { x, y, z }; return v; }
 	static FORCEINLINE Vec3 CreateFromPtr( const float* x ){ Vec3 v = { x[0], x[1], x[2] }; return v; }
+	static FORCEINLINE Vec3 CreateRandomVector( float maxdist )
+	{
+		float a = randf() * M_PI * 2;
+		float b = randf() * M_PI;
+		float d = randf() * maxdist;
+		float ac = cos( a ), as = sin( a );
+		float bc = cos( b ), bs = sin( b );
+		Vec3 v = { ac * bs * d, as * bs * d, bc * d };
+		return v;
+	}
 	
 	FORCEINLINE Vec3 operator + () const { return *this; }
 	FORCEINLINE Vec3 operator - () const { Vec3 v = { -x, -y, -z }; return v; }
@@ -112,6 +134,9 @@ struct Vec3
 	FORCEINLINE Vec3& operator *= ( float f ){ x *= f; y *= f; z *= f; return *this; }
 	FORCEINLINE Vec3& operator /= ( float f ){ x /= f; y /= f; z /= f; return *this; }
 	
+	FORCEINLINE bool operator == ( const Vec3& o ) const { return x == o.x && y == o.y && z == o.z; }
+	FORCEINLINE bool operator != ( const Vec3& o ) const { return x != o.x || y != o.y || z != o.z; }
+	
 	FORCEINLINE bool IsZero() const { return x == 0 && y == 0 && z == 0; }
 	FORCEINLINE float LengthSq() const { return x * x + y * y + z * z; }
 	FORCEINLINE float Length() const { return sqrtf( LengthSq() ); }
@@ -127,7 +152,17 @@ struct Vec3
 		Vec3 v = { x * invlen, y * invlen, z * invlen };
 		return v;
 	}
+	
+	void Dump( FILE* f ) const
+	{
+		fprintf( f, "Vec3 ( %.2f %.2f %.2f )\n", x, y, z );
+	}
 };
+
+FORCEINLINE Vec3 operator + ( float f, const Vec3& v ){ Vec3 out = { f + v.x, f + v.y, f + v.z }; return out; }
+FORCEINLINE Vec3 operator - ( float f, const Vec3& v ){ Vec3 out = { f - v.x, f - v.y, f - v.z }; return out; }
+FORCEINLINE Vec3 operator * ( float f, const Vec3& v ){ Vec3 out = { f * v.x, f * v.y, f * v.z }; return out; }
+FORCEINLINE Vec3 operator / ( float f, const Vec3& v ){ Vec3 out = { f / v.x, f / v.y, f / v.z }; return out; }
 
 FORCEINLINE float Vec3Dot( const Vec3& v1, const Vec3& v2 ){ return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z; }
 FORCEINLINE Vec3 Vec3Cross( const Vec3& v1, const Vec3& v2 )
@@ -169,7 +204,7 @@ struct Mat4
 	FORCEINLINE Vec3 TransformPos( const Vec3& pos ) const { return Transform( pos, 1.0f ); }
 	FORCEINLINE Vec3 TransformNormal( const Vec3& nrm ) const { return Transform( nrm, 0.0f ); }
 	
-	void InvertTo( Mat4& out );
+	bool InvertTo( Mat4& out );
 	FORCEINLINE void Transpose()
 	{
 		std::swap( m[1][0], m[0][1] );
@@ -190,6 +225,16 @@ struct Mat4
 		
 		out.InvertTo( out );
 		out.Transpose();
+	}
+	
+	void Dump( FILE* f ) const
+	{
+		fprintf( f, "Mat4 (\n" );
+		fprintf( f, "  %.2f %.2f %.2f %.2f\n", m[0][0], m[0][1], m[0][2], m[0][3] );
+		fprintf( f, "  %.2f %.2f %.2f %.2f\n", m[1][0], m[1][1], m[1][2], m[1][3] );
+		fprintf( f, "  %.2f %.2f %.2f %.2f\n", m[2][0], m[2][1], m[2][2], m[2][3] );
+		fprintf( f, "  %.2f %.2f %.2f %.2f\n", m[3][0], m[3][1], m[3][2], m[3][3] );
+		fprintf( f, ")\n" );
 	}
 };
 

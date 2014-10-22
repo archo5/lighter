@@ -18,3 +18,4 @@ ipch
 /docs/*.toc
 .DS_Store
 xcuserdata
+!*.data

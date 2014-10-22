@@ -3,8 +3,134 @@
 #include "lighter_int.hpp"
 
 
-void Mat4::InvertTo( Mat4& out )
+bool Mat4::InvertTo( Mat4& out )
 {
+	float inv[16], det;
+	int i;
+	
+	inv[0] = a[5]  * a[10] * a[15] -
+			 a[5]  * a[11] * a[14] -
+			 a[9]  * a[6]  * a[15] +
+			 a[9]  * a[7]  * a[14] +
+			 a[13] * a[6]  * a[11] -
+			 a[13] * a[7]  * a[10];
+	
+	inv[4] = -a[4]  * a[10] * a[15] +
+			  a[4]  * a[11] * a[14] +
+			  a[8]  * a[6]  * a[15] -
+			  a[8]  * a[7]  * a[14] -
+			  a[12] * a[6]  * a[11] +
+			  a[12] * a[7]  * a[10];
+	
+	inv[8] = a[4]  * a[9] * a[15] -
+			 a[4]  * a[11] * a[13] -
+			 a[8]  * a[5] * a[15] +
+			 a[8]  * a[7] * a[13] +
+			 a[12] * a[5] * a[11] -
+			 a[12] * a[7] * a[9];
+	
+	inv[12] = -a[4]  * a[9] * a[14] +
+			   a[4]  * a[10] * a[13] +
+			   a[8]  * a[5] * a[14] -
+			   a[8]  * a[6] * a[13] -
+			   a[12] * a[5] * a[10] +
+			   a[12] * a[6] * a[9];
+	
+	inv[1] = -a[1]  * a[10] * a[15] +
+			  a[1]  * a[11] * a[14] +
+			  a[9]  * a[2] * a[15] -
+			  a[9]  * a[3] * a[14] -
+			  a[13] * a[2] * a[11] +
+			  a[13] * a[3] * a[10];
+	
+	inv[5] = a[0]  * a[10] * a[15] -
+			 a[0]  * a[11] * a[14] -
+			 a[8]  * a[2] * a[15] +
+			 a[8]  * a[3] * a[14] +
+			 a[12] * a[2] * a[11] -
+			 a[12] * a[3] * a[10];
+	
+	inv[9] = -a[0]  * a[9] * a[15] +
+			  a[0]  * a[11] * a[13] +
+			  a[8]  * a[1] * a[15] -
+			  a[8]  * a[3] * a[13] -
+			  a[12] * a[1] * a[11] +
+			  a[12] * a[3] * a[9];
+	
+	inv[13] = a[0]  * a[9] * a[14] -
+			  a[0]  * a[10] * a[13] -
+			  a[8]  * a[1] * a[14] +
+			  a[8]  * a[2] * a[13] +
+			  a[12] * a[1] * a[10] -
+			  a[12] * a[2] * a[9];
+	
+	inv[2] = a[1]  * a[6] * a[15] -
+			 a[1]  * a[7] * a[14] -
+			 a[5]  * a[2] * a[15] +
+			 a[5]  * a[3] * a[14] +
+			 a[13] * a[2] * a[7] -
+			 a[13] * a[3] * a[6];
+	
+	inv[6] = -a[0]  * a[6] * a[15] +
+			  a[0]  * a[7] * a[14] +
+			  a[4]  * a[2] * a[15] -
+			  a[4]  * a[3] * a[14] -
+			  a[12] * a[2] * a[7] +
+			  a[12] * a[3] * a[6];
+	
+	inv[10] = a[0]  * a[5] * a[15] -
+			  a[0]  * a[7] * a[13] -
+			  a[4]  * a[1] * a[15] +
+			  a[4]  * a[3] * a[13] +
+			  a[12] * a[1] * a[7] -
+			  a[12] * a[3] * a[5];
+	
+	inv[14] = -a[0]  * a[5] * a[14] +
+			   a[0]  * a[6] * a[13] +
+			   a[4]  * a[1] * a[14] -
+			   a[4]  * a[2] * a[13] -
+			   a[12] * a[1] * a[6] +
+			   a[12] * a[2] * a[5];
+	
+	inv[3] = -a[1] * a[6] * a[11] +
+			  a[1] * a[7] * a[10] +
+			  a[5] * a[2] * a[11] -
+			  a[5] * a[3] * a[10] -
+			  a[9] * a[2] * a[7] +
+			  a[9] * a[3] * a[6];
+	
+	inv[7] = a[0] * a[6] * a[11] -
+			 a[0] * a[7] * a[10] -
+			 a[4] * a[2] * a[11] +
+			 a[4] * a[3] * a[10] +
+			 a[8] * a[2] * a[7] -
+			 a[8] * a[3] * a[6];
+	
+	inv[11] = -a[0] * a[5] * a[11] +
+			   a[0] * a[7] * a[9] +
+			   a[4] * a[1] * a[11] -
+			   a[4] * a[3] * a[9] -
+			   a[8] * a[1] * a[7] +
+			   a[8] * a[3] * a[5];
+	
+	inv[15] = a[0] * a[5] * a[10] -
+			  a[0] * a[6] * a[9] -
+			  a[4] * a[1] * a[10] +
+			  a[4] * a[2] * a[9] +
+			  a[8] * a[1] * a[6] -
+			  a[8] * a[2] * a[5];
+	
+	det = a[0] * inv[0] + a[1] * inv[4] + a[2] * inv[8] + a[3] * inv[12];
+	
+	if( det == 0 )
+		return false;
+	
+	det = 1.0f / det;
+	
+	for( i = 0; i < 16; ++i )
+		out.a[ i ] = inv[ i ] * det;
+	
+	return true;
 }
 
 
@@ -22,7 +148,7 @@ void TransformNormals( Vec3* out, Vec3* arr, size_t count, const Mat4& matrix )
 	Mat4 nrmtx;
 	matrix.GenNormalMatrix( nrmtx );
 	for( size_t i = 0; i < count; ++i )
-		out[i] = nrmtx.TransformNormal( arr[i] );
+		out[i] = nrmtx.TransformNormal( arr[i] ).Normalized();
 }
 
 
@@ -82,10 +208,10 @@ void RasterizeTriangle2D_x2_ex( Vec3* img1, Vec3* img2, i32 width, i32 height, f
 	
 	if( maxX < 0 || minX >= width || maxY < 0 || minY >= height )
 		return;
-	if( maxX < 0 ) maxX = 0;
-	if( minX >= width ) minX = width - 1;
-	if( maxY < 0 ) maxY = 0;
-	if( minY >= height ) minY = height - 1;
+	if( minX < 0 ) minX = 0;
+	if( maxX >= width ) maxX = width - 1;
+	if( minY < 0 ) minY = 0;
+	if( maxY >= height ) maxY = height - 1;
 	
 	Vec2 p1p2 = p2 - p1;
 	Vec2 p1p3 = p3 - p1;
@@ -131,21 +257,43 @@ float PlaneTriangleIntersect( const Vec3& N, float D, const Vec3& P1, const Vec3
 
 float IntersectLineSegmentTriangle( const Vec3& L1, const Vec3& L2, const Vec3& P1, const Vec3& P2, const Vec3& P3 )
 {
-	Vec3 E0 = P2 - P1, E1 = P3 - P1;
-	if( E0.IsZero() || E1.IsZero() )
+	Vec3 u = P2 - P1;
+	Vec3 v = P3 - P1;
+	Vec3 n = Vec3Cross( u, v );
+	if( n.IsZero() )
 		return 2.0f;
-	Vec3 N = Vec3Cross( E0, E1 ).Normalized();
-	float D = Vec3Dot( N, P1 ), D0 = Vec3Dot( N, L1 ), D1 = Vec3Dot( N, L2 );
-	if( ( D0 - D ) * ( D1 - D ) >= 0 )
-		return 2.0f;
-	float dist = ( D - D0 ) / ( D1 - D0 );
 	
-	Vec3 isp = L1 * ( 1 - dist ) + L2 * dist;
-	float s = ( Vec3Dot( isp, E0 ) - Vec3Dot( P1, E0 ) ) / E0.LengthSq();
-	float t = ( Vec3Dot( isp, E1 ) - Vec3Dot( P1, E1 ) ) / E1.LengthSq();
-	if( s <= 0 || t <= 0 || s + t >= 1 )
+	Vec3 dir = L2 - L1;
+	Vec3 w0 = L1 - P1;
+	float a = -Vec3Dot( n, w0 );
+	float b = Vec3Dot( n, dir );
+	if( fabs( b ) < SMALL_FLOAT )
 		return 2.0f;
-	return dist;
+	
+	float r = a / b;
+	if( r < 0.0f || r > 1.0f )
+	    return 2.0f;
+	
+	Vec3 I = L1 + r * dir;
+	
+	// is I inside T?
+	float uu = Vec3Dot( u, u );
+	float uv = Vec3Dot( u, v );
+	float vv = Vec3Dot( v, v );
+	Vec3 w = I - P1;
+	float wu = Vec3Dot( w, u );
+	float wv = Vec3Dot( w, v );
+	float D = uv * uv - uu * vv;
+	
+	// get and test parametric coords
+	float s = ( uv * wv - vv * wu ) / D;
+	if( s < 0.0f || s > 1.0f )
+		return 2.0f;
+	float t = ( uv * wu - uu * wv ) / D;
+	if( t < 0.0f || ( s + t ) > 1.0f )
+		return 2.0f;
+	
+	return r;
 }
 
 
@@ -157,15 +305,7 @@ void BSPNode::AddTriangle( BSPTriangle* tri, int depth )
 {
 	if( front_node ) // node already split
 	{
-		float res = PlaneTriangleIntersect( N, D, tri->P1, tri->P2, tri->P3 );
-		if( res == 0 )
-		{
-			AddTriangleSplit( tri, depth + 1 );
-		}
-		else
-		{
-			( res > 0 ? front_node : back_node )->AddTriangle( tri, depth + 1 );
-		}
+		AddTriangleSplit( tri, depth + 1 );
 	}
 	else
 	{
@@ -173,6 +313,8 @@ void BSPNode::AddTriangle( BSPTriangle* tri, int depth )
 		if( triangles.size() > BSP_MAX_NODE_COUNT && depth < BSP_MAX_NODE_DEPTH )
 		{
 			PickSplitPlane();
+			front_node = new BSPNode;
+			back_node = new BSPNode;
 			for( size_t i = 0; i < triangles.size(); ++i )
 				AddTriangleSplit( tri, depth + 1 );
 			std::vector< BSPTriangle >().swap( triangles );
@@ -182,7 +324,68 @@ void BSPNode::AddTriangle( BSPTriangle* tri, int depth )
 
 void BSPNode::AddTriangleSplit( BSPTriangle* tri, int depth )
 {
-	// TODO
+	Vec3 P1 = tri->P1;
+	Vec3 P2 = tri->P2;
+	Vec3 P3 = tri->P3;
+	
+	// assume that plane is picked (valid N, D)
+	float proj1 = Vec3Dot( N, P1 ) - D;
+	float proj2 = Vec3Dot( N, P2 ) - D;
+	float proj3 = Vec3Dot( N, P3 ) - D;
+	if( proj1 * proj2 >= 0 && proj1 * proj3 >= 0 )
+	{
+		( proj1 > 0 ? front_node : back_node )->AddTriangle( tri, depth );
+		return;
+	}
+	
+	Vec3 S1 = P1, S2 = P2, S3 = P3;
+	float td12 = proj1 - proj2; // opposite signs expected, both must be 0 for diff to be 0
+	if( td12 )
+		S1 = TLERP( P1, P2, fabs( proj1 / td12 ) );
+	float td23 = proj2 - proj3; // opposite signs expected, both must be 0 for diff to be 0
+	if( td23 )
+		S2 = TLERP( P2, P3, fabs( proj2 / td23 ) );
+	float td31 = proj3 - proj1; // opposite signs expected, both must be 0 for diff to be 0
+	if( td31 )
+		S3 = TLERP( P3, P1, fabs( proj3 / td31 ) );
+	
+	// determine split edges and act accordingly
+	if( td12 && td23 && td31 ) return; // invalid triangle, ignore
+	// one-intersect case appears to be impossible
+	// zero-intersect case already checked
+	if( td12 )
+	{
+		if( td23 )
+		{
+			// intersection at EDGE 1 & EDGE 2
+			BSPTriangle tri1 = { S1, P2, S2 };
+			( proj2 > 0 ? front_node : back_node )->AddTriangle( &tri1, depth );
+			BSPTriangle tri2 = { S2, P3, P1 };
+			( proj2 < 0 ? front_node : back_node )->AddTriangle( &tri2, depth );
+			BSPTriangle tri3 = { P1, S1, S2 };
+			( proj2 < 0 ? front_node : back_node )->AddTriangle( &tri3, depth );
+		}
+		else
+		{
+			// intersection at EDGE 3 & EDGE 1
+			BSPTriangle tri1 = { S3, P1, S1 };
+			( proj1 > 0 ? front_node : back_node )->AddTriangle( &tri1, depth );
+			BSPTriangle tri2 = { S1, P2, P3 };
+			( proj1 < 0 ? front_node : back_node )->AddTriangle( &tri2, depth );
+			BSPTriangle tri3 = { P3, S3, S1 };
+			( proj1 < 0 ? front_node : back_node )->AddTriangle( &tri3, depth );
+		}
+	}
+	else
+	{
+		// intersection at EDGE 2 & EDGE 3
+		BSPTriangle tri1 = { S2, P3, S3 };
+		( proj3 > 0 ? front_node : back_node )->AddTriangle( &tri1, depth );
+		BSPTriangle tri2 = { S3, P1, P2 };
+		( proj3 < 0 ? front_node : back_node )->AddTriangle( &tri2, depth );
+		BSPTriangle tri3 = { P2, S2, S3 };
+		( proj3 < 0 ? front_node : back_node )->AddTriangle( &tri3, depth );
+	}
 }
 
 float BSPNode::IntersectRay( const Vec3& from, const Vec3& to )
