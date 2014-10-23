@@ -236,7 +236,7 @@ void testfunc_mesh1()
 	// LIGHTS
 	ltr_LightInfo lights[] =
 	{
-		{ LTR_LT_POINT, { -2.18f, -4.04f, 1.40f }, {0,0,0}, {0,0,0}, { 0.9f, 0.1f, 0.05f }, 16.0f, 1.0f, 0.1f, 9 },
+		{ LTR_LT_POINT, { -2.18f, -4.04f, 1.40f }, {0,0,0}, {0,0,0}, { 0.9f, 0.7f, 0.5f }, 16.0f, 1.0f, 0.1f, 9 },
 	};
 	for( size_t lt = 0; lt < sizeof(lights)/sizeof(lights[0]); ++lt )
 		ltr_LightAdd( scene, &lights[ lt ] );

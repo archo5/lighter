@@ -153,7 +153,7 @@ void ltr_Scene::RasterizeInstance( ltr_MeshInstance* mi, float margin )
 
 float ltr_Scene::VisibilityTest( const Vec3& A, ltr_Light* light )
 {
-	int count = 0;
+	float total = 0.0f;
 	for( size_t i = 0; i < light->sample_positions.size(); ++i )
 	{
 		const Vec3& B = light->sample_positions[ i ];
@@ -161,11 +161,11 @@ float ltr_Scene::VisibilityTest( const Vec3& A, ltr_Light* light )
 		Vec3 mA = A + diffnorm * SMALL_FLOAT;
 		Vec3 mB = B - diffnorm * SMALL_FLOAT;
 		
-		float hit = m_triTree.IntersectRay( mA, mB );
+		float hit = m_triTree.IntersectRay( mB, mA );
 		if( hit < 1.0f )
-			count++;
+			total += TMIN( ( 1 - hit ) * ( B - A ).Length(), 1.0f );
 	}
-	return 1.0f - (float) count / (float) light->sample_positions.size();
+	return 1.0f - total / (float) light->sample_positions.size();
 }
 
 void ltr_Scene::DoWork()

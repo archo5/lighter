@@ -349,13 +349,14 @@ void BSPNode::AddTriangleSplit( BSPTriangle* tri, int depth )
 	if( td31 )
 		S3 = TLERP( P3, P1, fabs( proj3 / td31 ) );
 	
+	puts( "TODO FIX LEAK" );
 	// determine split edges and act accordingly
-	if( td12 && td23 && td31 ) return; // invalid triangle, ignore
+	if( proj1 * proj2 < 0 && proj2 * proj3 < 0 && proj3 * proj1 < 0 ) return;// invalid triangle, ignore
 	// one-intersect case appears to be impossible
 	// zero-intersect case already checked
-	if( td12 )
+	if( proj1 * proj2 < 0 )
 	{
-		if( td23 )
+		if( proj2 * proj3 < 0 )
 		{
 			// intersection at EDGE 1 & EDGE 2
 			BSPTriangle tri1 = { S1, P2, S2 };
