@@ -300,6 +300,7 @@ float IntersectLineSegmentTriangle( const Vec3& L1, const Vec3& L2, const Vec3& 
 #define BSP_NO_HIT 2.0f
 #define BSP_MAX_NODE_COUNT 16
 #define BSP_MAX_NODE_DEPTH 32
+#define BSP_REEVAL_INTERVAL 8
 
 void BSPNode::AddTriangle( BSPTriangle* tri, int depth )
 {
@@ -310,14 +311,18 @@ void BSPNode::AddTriangle( BSPTriangle* tri, int depth )
 	else
 	{
 		triangles.push_back( *tri );
-		if( triangles.size() > BSP_MAX_NODE_COUNT && depth < BSP_MAX_NODE_DEPTH )
+		if( triangles.size() > BSP_MAX_NODE_COUNT &&
+			triangles.size() % BSP_REEVAL_INTERVAL == 0 &&
+			depth < BSP_MAX_NODE_DEPTH )
 		{
-			PickSplitPlane();
-			front_node = new BSPNode;
-			back_node = new BSPNode;
-			for( size_t i = 0; i < triangles.size(); ++i )
-				AddTriangleSplit( tri, depth + 1 );
-			std::vector< BSPTriangle >().swap( triangles );
+			if( PickSplitPlane() )
+			{
+				front_node = new BSPNode;
+				back_node = new BSPNode;
+				for( size_t i = 0; i < triangles.size(); ++i )
+					AddTriangleSplit( &triangles[i], depth + 1 );
+				BSPTriVector().swap( triangles );
+			}
 		}
 	}
 }
@@ -332,9 +337,9 @@ void BSPNode::AddTriangleSplit( BSPTriangle* tri, int depth )
 	float proj1 = Vec3Dot( N, P1 ) - D;
 	float proj2 = Vec3Dot( N, P2 ) - D;
 	float proj3 = Vec3Dot( N, P3 ) - D;
-	if( proj1 * proj2 >= 0 && proj1 * proj3 >= 0 )
+	if( proj1 * proj2 >= -SMALL_FLOAT && proj1 * proj3 >= -SMALL_FLOAT )
 	{
-		( proj1 > 0 ? front_node : back_node )->AddTriangle( tri, depth );
+		( proj1 + proj2 + proj3 > 0 ? front_node : back_node )->AddTriangle( tri, depth );
 		return;
 	}
 	
@@ -349,11 +354,11 @@ void BSPNode::AddTriangleSplit( BSPTriangle* tri, int depth )
 	if( td31 )
 		S3 = TLERP( P3, P1, fabs( proj3 / td31 ) );
 	
-	puts( "TODO FIX LEAK" );
+	static int wat = 0;
+	if( wat++ > 1000 )
+		puts( "TODO FIX LEAK" );
+	
 	// determine split edges and act accordingly
-	if( proj1 * proj2 < 0 && proj2 * proj3 < 0 && proj3 * proj1 < 0 ) return;// invalid triangle, ignore
-	// one-intersect case appears to be impossible
-	// zero-intersect case already checked
 	if( proj1 * proj2 < 0 )
 	{
 		if( proj2 * proj3 < 0 )
@@ -391,7 +396,7 @@ void BSPNode::AddTriangleSplit( BSPTriangle* tri, int depth )
 
 float BSPNode::IntersectRay( const Vec3& from, const Vec3& to )
 {
-	if( front_node ) // node already split
+	if( front_node ) // node split
 	{
 		float d_from = Vec3Dot( from, N ) - D;
 		float d_to = Vec3Dot( to, N ) - D;
@@ -424,7 +429,7 @@ float BSPNode::IntersectRay( const Vec3& from, const Vec3& to )
 	}
 }
 
-void BSPNode::PickSplitPlane()
+bool BSPNode::PickSplitPlane()
 {
 	// split direction by positions / normals
 	float mult = 1.0f / triangles.size();
@@ -436,12 +441,13 @@ void BSPNode::PickSplitPlane()
 		Vec3 ND1 = ( T.P2 - T.P1 ) * mult3;
 		Vec3 ND2 = ( T.P3 - T.P2 ) * mult3;
 		Vec3 ND3 = ( T.P1 - T.P3 ) * mult3;
+		Vec3 NNRM = Vec3Cross( ND1, ND3 ).Normalized();
 		PN += Vec3Dot( PN, ND1 ) < 0 ? -ND1 : ND1;
 		PN += Vec3Dot( PN, ND2 ) < 0 ? -ND2 : ND2;
 		PN += Vec3Dot( PN, ND3 ) < 0 ? -ND3 : ND3;
-		NN += Vec3Cross( ND1, -ND3 ).Normalized() * mult;
+		NN += Vec3Dot( NN, NNRM ) < 0 ? -NNRM : NNRM;
 	}
-	N = ( PN.Normalized() * 0.25f + NN.Normalized() * 0.75f ).Normalized();
+	N = ( PN.Normalized() * 0.5f + NN.Normalized() * 0.5f ).Normalized();
 	
 	float dsum = 0;
 	for( size_t i = 0; i < triangles.size(); ++i )
@@ -450,6 +456,37 @@ void BSPNode::PickSplitPlane()
 		dsum += Vec3Dot( T.P1, N ) + Vec3Dot( T.P2, N ) + Vec3Dot( T.P3, N );
 	}
 	D = dsum * mult3;
+	
+	// evaluate viability of splitting
+	int numA = 0;
+	int numB = 0;
+	float d1, d2, d3;
+	for( size_t i = 0; i < triangles.size(); ++i )
+	{
+		BSPTriangle& T = triangles[i];
+		d1 = Vec3Dot( T.P1, N ) - D;
+		d2 = Vec3Dot( T.P2, N ) - D;
+		d3 = Vec3Dot( T.P3, N ) - D;
+		if( d1 * d2 > -SMALL_FLOAT && d2 * d3 > -SMALL_FLOAT )
+		{
+			if( d1 > 0 )
+				numA++;
+			else
+				numB++;
+		}
+		else
+		{
+			numA += ( d1 > 0 ) + ( d2 > 0 ) + ( d3 > 0 );
+			numB += ( d1 <=0 ) + ( d2 <=0 ) + ( d3 <=0 );
+		}
+	}
+	if( numA != 0 && numB != 0 && numA + numB < triangles.size() * 1.7f )
+	{
+		float q = (float) numA / (float) numB;
+		if( q < 1 ) q = 1 / q;
+		return q < 3.0f;
+	}
+	return false;
 }
 
 

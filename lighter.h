@@ -30,6 +30,9 @@ typedef float ltr_VEC4[4];
 typedef ltr_VEC4 ltr_MAT4[4];
 
 
+#define LTR_VEC3_SET( v, x, y, z ) do{ (v)[0]=(x); (v)[1]=(y); (v)[2]=(z); }while(0)
+
+
 #define LTRC_SUCCESS 0
 #define LTRC_ATEND   1
 
@@ -87,6 +90,46 @@ typedef struct ltr_LightInfo
 }
 ltr_LightInfo;
 
+typedef struct ltr_Config
+{
+	// callbacks
+	void* userdata;
+	LTRBOOL (*size_fn)
+	(
+		ltr_Config* /* config */,
+		const char* /* mesh_ident */,
+		size_t /* mesh_ident_size */,
+		const char* /* inst_ident */,
+		size_t /* inst_ident_size */,
+		float /* computed_surface_area */,
+		float /* inst_importance */,
+		u32[2] /* out_width, out_height */
+	);
+	// limits & factors
+	size_t max_tree_memory;
+	size_t max_lightmap_size;
+	float global_size_factor;
+	// lightmap generation
+	ltr_VEC3 clear_color; /* the color used outside triangles */
+	ltr_VEC3 ambient_color; /* the base color used inside triangles */
+	// AMBIENT OCCLUSION effect:
+	// ao_factor = 1 - max( raytrace_distance / ao_distance, 1 )
+	// - AO FACTORS are accumulated -
+	// ao_factor = pow( min( ao_factor * ao_multiplier, 1 ), ao_falloff )
+	// IF ao_effect >= 0: color = color_orig * ( 1 - ao_effect * ao_factor ) + color_ao * ao_factor;
+	// IF ao_effect <  0: color = lerp( color_orig, lerp( color_ao, color_orig * color_ao, -ao_effect ), ao_factor )
+	float ao_distance;
+	float ao_multiplier;
+	float ao_falloff;
+	float ao_effect;
+	float ao_divergence; /* hemisphere [0] -to- full sphere [1] direction picking */
+	ltr_VEC3 ao_color_rgb;
+	int ao_num_samples;
+	// GAUSSIAN BLUR effect:
+	float blur_size;
+}
+ltr_Config;
+
 typedef struct ltr_WorkOutputInfo
 {
 	u32 lightmap_count;
@@ -114,6 +157,8 @@ typedef struct ltr_Scene ltr_Scene;
 LTRAPI ltr_Scene* ltr_CreateScene();
 LTRAPI void ltr_DestroyScene( ltr_Scene* scene );
 LTRAPI LTRCODE ltr_DoWork( ltr_Scene* scene, ltr_WorkInfo* info );
+LTRAPI void ltr_GetConfig( ltr_Config* cfg, ltr_Scene* opt_scene );
+LTRAPI LTRCODE ltr_SetConfig( ltr_Scene* scene, ltr_Config* cfg );
 
 // - data input
 LTRAPI ltr_Mesh* ltr_CreateMesh( ltr_Scene* scene, const char* ident, size_t ident_size );

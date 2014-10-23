@@ -4,6 +4,7 @@
 
 #include <math.h>
 #include <string.h>
+#include <stdio.h>
 #include <vector>
 #include <string>
 
@@ -31,7 +32,8 @@
 #define LTR_WT_COLINFO  1 // generate collision info (* mesh)
 #define LTR_WT_SAMPLES  2 // gather sampled information to compact position/normal/index arrays, allocate color arrays (* mesh)
 #define LTR_WT_LMRENDER 3 // generate colors for samples by rendering lights to lightmaps (* mesh * light)
-#define LTR_WT_FINALIZE 4 // push sample data back to lightmaps (* mesh)
+#define LTR_WT_AORENDER 4 // generate ambient occlusion for samples (* mesh)
+#define LTR_WT_FINALIZE 5 // push sample data back to lightmaps (* mesh)
 
 
 FORCEINLINE float randf(){ return (float) rand() / (float) RAND_MAX; }
@@ -110,6 +112,7 @@ struct Vec3
 		Vec3 v = { ac * bs * d, as * bs * d, bc * d };
 		return v;
 	}
+	static FORCEINLINE Vec3 CreateRandomVectorDirDvg( const Vec3& dir, float dvg, float maxdist );
 	
 	FORCEINLINE Vec3 operator + () const { return *this; }
 	FORCEINLINE Vec3 operator - () const { Vec3 v = { -x, -y, -z }; return v; }
@@ -175,6 +178,20 @@ FORCEINLINE Vec3 Vec3Cross( const Vec3& v1, const Vec3& v2 )
 	};
 	return out;
 }
+
+Vec3 Vec3::CreateRandomVectorDirDvg( const Vec3& dir, float dvg, float maxdist )
+{
+	float a = randf() * M_PI * 2;
+	float b = randf() * M_PI * dvg;
+	float d = randf() * maxdist;
+	float ac = cos( a ), as = sin( a );
+	float bc = cos( b ), bs = sin( b );
+	Vec3 diffvec = { dir.y, dir.z, dir.x };
+	Vec3 up = Vec3Cross( dir, diffvec ).Normalized();
+	Vec3 rt = Vec3Cross( dir, up );
+	return ( ac * bs * rt + as * bs * up + bc * dir ) * d;
+}
+
 
 struct Mat4
 {
@@ -271,11 +288,34 @@ typedef std::vector< BSPTriangle > BSPTriVector;
 struct BSPNode
 {
 	BSPNode() : front_node( NULL ), back_node( NULL ){}
+	~BSPNode()
+	{
+		if( front_node ) delete front_node;
+		if( back_node ) delete back_node;
+	}
 	
 	void AddTriangle( BSPTriangle* tri, int depth );
 	void AddTriangleSplit( BSPTriangle* tri, int depth );
 	float IntersectRay( const Vec3& from, const Vec3& to );
-	void PickSplitPlane();
+	bool PickSplitPlane();
+	
+	void Dump( FILE* f, int lev = 0, const char* pfx = "" )
+	{
+		for( int i = 0; i < lev; ++i )
+			fputc( ' ', f );
+		fprintf( f, "%sNODE [%g;%g;%g](%g), tris=%d\n", pfx, N.x, N.y, N.z, D, (int) triangles.size() );
+		fprintf( f, "{\n" );
+		for( size_t i = 0; i < triangles.size(); ++i )
+		{
+			fprintf( f, "  " ); triangles[i].P1.Dump( stdout );
+			fprintf( f, "  " ); triangles[i].P2.Dump( stdout );
+			fprintf( f, "  " ); triangles[i].P3.Dump( stdout );
+		}
+		if( front_node )
+			front_node->Dump( f, lev + 1, "F " );
+		if( back_node )
+			back_node->Dump( f, lev + 1, "B " );
+	}
 	
 	Vec3 N;
 	float D;
@@ -288,6 +328,7 @@ struct BSPNode
 struct BSPTree
 {
 	BSPTree() : root( new BSPNode() ){}
+	~BSPTree(){ delete root; }
 	
 	FORCEINLINE void AddTriangle( BSPTriangle* tri ){ root->AddTriangle( tri, 0 ); }
 	FORCEINLINE float IntersectRay( const Vec3& from, const Vec3& to ){ return root->IntersectRay( from, to ); }

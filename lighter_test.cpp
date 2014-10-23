@@ -212,6 +212,11 @@ void testfunc_mesh1()
 	
 	ltr_Scene* scene = ltr_CreateScene();
 	
+	ltr_Config cfg;
+	ltr_GetConfig( &cfg, scene );
+	cfg.ao_distance = 2;
+	ltr_SetConfig( scene, &cfg );
+	
 	// MESH 1
 	ltr_Mesh* mesh1 = ltr_CreateMesh( scene, "mesh1", strlen("mesh1") );
 	testmesh M;
@@ -236,7 +241,8 @@ void testfunc_mesh1()
 	// LIGHTS
 	ltr_LightInfo lights[] =
 	{
-		{ LTR_LT_POINT, { -2.18f, -4.04f, 1.40f }, {0,0,0}, {0,0,0}, { 0.9f, 0.7f, 0.5f }, 16.0f, 1.0f, 0.1f, 9 },
+		{ LTR_LT_POINT, { -2.18f, -4.04f, 1.40f }, {0,0,0}, {0,0,0}, { 0.9f, 0.7f, 0.5f }, 16.0f, 1.0f, 0.1f, 5 },
+		{ LTR_LT_POINT, { 2.18f, 4.04f, 1.40f }, {0,0,0}, {0,0,0}, { 0.5f, 0.7f, 0.9f }, 16.0f, 1.0f, 0.1f, 5 },
 	};
 	for( size_t lt = 0; lt < sizeof(lights)/sizeof(lights[0]); ++lt )
 		ltr_LightAdd( scene, &lights[ lt ] );

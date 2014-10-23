@@ -3,6 +3,31 @@
 #include "lighter_int.hpp"
 
 
+
+
+extern "C" LTRBOOL ltr_DefaultSizeFunc
+(
+	ltr_Config* config,
+	const char* mesh_ident,
+	size_t mesh_ident_size,
+	const char* inst_ident,
+	size_t inst_ident_size,
+	float computed_surface_area,
+	float inst_importance,
+	u32 out_size[2]
+)
+{
+	float size = config->global_size_factor * sqrtf( computed_surface_area ) * inst_importance;
+	if( size < 1 )
+		size = 1;
+	if( size > config->max_lightmap_size )
+		return 0;
+	out_size[0] = size;
+	out_size[1] = size;
+	return 1;
+}
+
+
 struct ltr_MeshPart
 {
 	u32 m_vertexCount;
@@ -61,14 +86,13 @@ typedef struct ltr_Light
 	float power;
 	float light_radius;
 	int shadow_sample_count;
-	Vec3Vector sample_positions;
 }
 ltr_Light;
 typedef std::vector< ltr_Light > LightVector;
 
 struct ltr_Scene
 {
-	ltr_Scene() : m_workType( LTR_WT_PREXFORM ), m_workPart( 0 ){}
+	ltr_Scene() : m_workType( LTR_WT_PREXFORM ), m_workPart( 0 ){ ltr_GetConfig( &config, NULL ); }
 	~ltr_Scene()
 	{
 		for( size_t i = 0; i < m_meshInstances.size(); ++i )
@@ -83,6 +107,9 @@ struct ltr_Scene
 	LTRCODE Advance();
 	void RasterizeInstance( ltr_MeshInstance* mi, float margin );
 	float VisibilityTest( const Vec3& A, ltr_Light* light );
+	float VisibilityTest( const Vec3& A, const Vec3& B );
+	
+	ltr_Config config;
 	
 	MeshPtrVector m_meshes;
 	MeshInstPtrVector m_meshInstances;
@@ -154,9 +181,9 @@ void ltr_Scene::RasterizeInstance( ltr_MeshInstance* mi, float margin )
 float ltr_Scene::VisibilityTest( const Vec3& A, ltr_Light* light )
 {
 	float total = 0.0f;
-	for( size_t i = 0; i < light->sample_positions.size(); ++i )
+	for( int i = 0; i < light->shadow_sample_count; ++i )
 	{
-		const Vec3& B = light->sample_positions[ i ];
+		const Vec3& B = light->position + Vec3::CreateRandomVector( light->light_radius );
 		Vec3 diffnorm = ( B - A ).Normalized();
 		Vec3 mA = A + diffnorm * SMALL_FLOAT;
 		Vec3 mB = B - diffnorm * SMALL_FLOAT;
@@ -165,7 +192,15 @@ float ltr_Scene::VisibilityTest( const Vec3& A, ltr_Light* light )
 		if( hit < 1.0f )
 			total += TMIN( ( 1 - hit ) * ( B - A ).Length(), 1.0f );
 	}
-	return 1.0f - total / (float) light->sample_positions.size();
+	return 1.0f - total / (float) light->shadow_sample_count;
+}
+
+float ltr_Scene::VisibilityTest( const Vec3& A, const Vec3& B )
+{
+	Vec3 diffnorm = ( B - A ).Normalized();
+	Vec3 mA = A + diffnorm * SMALL_FLOAT;
+	Vec3 mB = B - diffnorm * SMALL_FLOAT;
+	return m_triTree.IntersectRay( mB, mA );
 }
 
 void ltr_Scene::DoWork()
@@ -301,6 +336,50 @@ void ltr_Scene::DoWork()
 		}
 		break;
 		
+	case LTR_WT_AORENDER:
+		{
+			ltr_MeshInstance* mi = m_meshInstances[ m_workPart ];
+			float ao_divergence = config.ao_divergence * 0.5f + 0.5f;
+			float ao_distance = config.ao_distance,
+				ao_falloff = config.ao_falloff,
+				ao_multiplier = config.ao_multiplier,
+				ao_effect = config.ao_effect;
+			int num_samples = config.ao_num_samples;
+			Vec3 ao_color = Vec3::CreateFromPtr( config.ao_color_rgb );
+			
+			for( size_t i = 0; i < mi->m_lightmap.size(); ++i )
+			{
+				Vec3& SP = mi->m_samples_pos[ i ];
+				Vec3& SN = mi->m_samples_nrm[ i ];
+				Vec3& OutColor = mi->m_lightmap[ i ];
+				
+				Vec3 ray_origin = SP + SN * ( SMALL_FLOAT * 2 );
+				
+				float ao_factor = 0;
+				for( int s = 0; s < num_samples; ++s )
+				{
+					Vec3 ray_dir = Vec3::CreateRandomVectorDirDvg( SN, ao_divergence, ao_distance );
+					float hit = VisibilityTest( ray_origin, ray_origin + ray_dir );
+					if( hit < 1.0f )
+						ao_factor += 1.0f - hit;
+				}
+				ao_factor /= num_samples;
+				ao_factor = TMIN( ao_factor * ao_multiplier, 1.0f );
+				if( ao_falloff )
+					ao_factor = pow( ao_factor, ao_falloff );
+				
+				if( ao_effect >= 0 )
+				{
+					OutColor = OutColor * ( 1 - ao_factor * ( 1 - ao_effect ) ) + ao_color * ao_factor;
+				}
+				else
+				{
+					OutColor = TLERP( OutColor, TLERP( ao_color, ao_color * OutColor, -ao_effect ), ao_factor );
+				}
+			}
+		}
+		break;
+		
 	case LTR_WT_FINALIZE:
 		{
 			ltr_MeshInstance* mi = m_meshInstances[ m_workPart ];
@@ -349,6 +428,9 @@ LTRCODE ltr_Scene::Advance()
 		
 		m_workType++;
 		m_workPart = 0;
+		
+		if( m_workType == LTR_WT_AORENDER && config.ao_distance == 0 )
+			m_workType++;
 	}
 	
 	return LTRC_SUCCESS;
@@ -378,6 +460,10 @@ LTRCODE ltr_DoWork( ltr_Scene* scene, ltr_WorkInfo* info )
 		info->stage = "rendering lightmaps";
 		info->item_count = scene->m_meshInstances.size() * scene->m_lights.size();
 		break;
+	case LTR_WT_AORENDER:
+		info->stage = "rendering ambient occlusion";
+		info->item_count = scene->m_meshInstances.size();
+		break;
 	case LTR_WT_FINALIZE:
 		info->stage = "exporting lightmaps";
 		info->item_count = scene->m_meshInstances.size();
@@ -389,6 +475,41 @@ LTRCODE ltr_DoWork( ltr_Scene* scene, ltr_WorkInfo* info )
 	}
 	
 	return scene->Advance();
+}
+
+void ltr_GetConfig( ltr_Config* cfg, ltr_Scene* opt_scene )
+{
+	if( opt_scene )
+	{
+		memcpy( cfg, &opt_scene->config, sizeof(*cfg) );
+		return;
+	}
+	
+	cfg->userdata = NULL;
+	cfg->size_fn = ltr_DefaultSizeFunc;
+	
+	cfg->max_tree_memory = 128 * 1024 * 1024;
+	cfg->max_lightmap_size = 1024;
+	cfg->global_size_factor = 16;
+	
+	LTR_VEC3_SET( cfg->clear_color, 0, 0, 0 );
+	LTR_VEC3_SET( cfg->ambient_color, 0, 0, 0 );
+	
+	cfg->ao_distance = 0;
+	cfg->ao_multiplier = 2;
+	cfg->ao_falloff = 2;
+	cfg->ao_effect = 0;
+	cfg->ao_divergence = 0;
+	LTR_VEC3_SET( cfg->ao_color_rgb, 0, 0, 0 );
+	cfg->ao_num_samples = 149;
+	
+	cfg->blur_size = 0.8f;
+}
+
+LTRCODE ltr_SetConfig( ltr_Scene* scene, ltr_Config* cfg )
+{
+	memcpy( &scene->config, cfg, sizeof(*cfg) );
+	return 1;
 }
 
 
@@ -449,8 +570,8 @@ LTRBOOL ltr_MeshAddInstance( ltr_Mesh* mesh, ltr_MeshInstanceInfo* mii )
 		mi->m_ident.assign( mii->ident, mii->ident_size );
 	memcpy( mi->matrix.a, mii->matrix, sizeof(Mat4) );
 	mesh->m_scene->m_meshInstances.push_back( mi );
-	mi->lm_width = 256; // TODO: configurable
-	mi->lm_height = 256;
+	mi->lm_width = 128; // TODO: configurable
+	mi->lm_height = 128;
 	return 1;
 }
 
@@ -466,12 +587,8 @@ void ltr_LightAdd( ltr_Scene* scene, ltr_LightInfo* li )
 		li->range,
 		li->power,
 		li->light_radius,
-		TMAX( 1, li->shadow_sample_count ),
-		Vec3Vector()
+		TMAX( 1, li->shadow_sample_count )
 	};
-	L.sample_positions.resize( L.shadow_sample_count );
-	for( int i = 0; i < L.shadow_sample_count; ++i )
-		L.sample_positions[ i ] = L.position + Vec3::CreateRandomVector( li->light_radius );
 	scene->m_lights.push_back( L );
 }
 
