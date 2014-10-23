@@ -135,6 +135,15 @@ bool Mat4::InvertTo( Mat4& out )
 
 
 
+float TriangleArea( const Vec3& P1, const Vec3& P2, const Vec3& P3 )
+{
+	float a = ( P2 - P1 ).Length();
+	float b = ( P3 - P2 ).Length();
+	float c = ( P1 - P3 ).Length();
+	return sqrtf( ( a + b + c ) * ( b + c - a ) * ( c + a - b ) * ( a + b - c ) ) / 4.0f;
+}
+
+
 //
 // TRANSFORMATION
 //
@@ -294,6 +303,50 @@ float IntersectLineSegmentTriangle( const Vec3& L1, const Vec3& L2, const Vec3& 
 		return 2.0f;
 	
 	return r;
+}
+
+
+void Generate_Gaussian_Kernel( float* out, int ext, float radius )
+{
+	float sum = 0.0f;
+	float multconst = 1.0f / sqrtf( 2.0f * M_PI * radius * radius );
+	for( int i = -ext; i <= ext; ++i )
+		sum += out[ i + ext ] = exp( -0.5f * pow( (float) i / radius, 2.0f ) ) * multconst;
+	for( int i = -ext; i <= ext; ++i )
+		out[ i + ext ] /= sum;
+}
+
+void Convolve_Transpose( float* src, float* dst, u32 width, u32 height, int conext, float* kernel, float* tmp )
+{
+	for( u32 y = 0; y < height; ++y )
+	{
+		// write row to temporary buffer, extend data beyond sides
+		memcpy( tmp + conext * 3, src, sizeof(float) * width * 3 );
+		for( int i = 0; i < conext; ++i )
+		{
+			tmp[ i * 3 + 0 ] = tmp[ conext * 3 + 0 ];
+			tmp[ i * 3 + 1 ] = tmp[ conext * 3 + 1 ];
+			tmp[ i * 3 + 2 ] = tmp[ conext * 3 + 2 ];
+			tmp[ ( conext + width + i ) * 3 + 0 ] = tmp[ ( conext + width - 1 ) * 3 + 0 ];
+			tmp[ ( conext + width + i ) * 3 + 1 ] = tmp[ ( conext + width - 1 ) * 3 + 1 ];
+			tmp[ ( conext + width + i ) * 3 + 2 ] = tmp[ ( conext + width - 1 ) * 3 + 2 ];
+		}
+		// convolve with the kernel
+		for( u32 x = 0; x < width; ++x )
+		{
+			float* src_p = src + ( x + width * y ) * 3;
+			float* dst_p = dst + ( y + height * x ) * 3;
+			float sum[3] = { 0.0f, 0.0f, 0.0f };
+			for( int i = -conext; i <= conext; ++i )
+			{
+				float kq = kernel[ i + conext ];
+				sum[0] += src_p[ i * 3 + 0 ] * kq;
+				sum[1] += src_p[ i * 3 + 1 ] * kq;
+				sum[2] += src_p[ i * 3 + 2 ] * kq;
+			}
+			LTR_VEC3_SET( dst_p, sum[0], sum[1], sum[2] );
+		}
+	}
 }
 
 

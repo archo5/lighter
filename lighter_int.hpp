@@ -264,6 +264,8 @@ typedef std::vector< Mat4 > Mat4Vector;
 typedef std::vector< ltr_WorkOutput > WorkOutputVector;
 
 
+float TriangleArea( const Vec3& P1, const Vec3& P2, const Vec3& P3 );
+
 void TransformPositions( Vec3* out, Vec3* arr, size_t count, const Mat4& matrix );
 void TransformNormals( Vec3* out, Vec3* arr, size_t count, const Mat4& matrix );
 void RasterizeTriangle2D( Vec3* image, i32 width, i32 height, const Vec2& p1, const Vec2& p2, const Vec2& p3, const Vec3& v1, const Vec3& v2, const Vec3& v3 );
@@ -272,6 +274,9 @@ void RasterizeTriangle2D_x2_ex( Vec3* img1, Vec3* img2, i32 width, i32 height, f
 	const Vec3& va1, const Vec3& va2, const Vec3& va3,
 	const Vec3& vb1, const Vec3& vb2, const Vec3& vb3 );
 
+
+void Generate_Gaussian_Kernel( float* out, int ext, float radius );
+void Convolve_Transpose( float* src, float* dst, u32 width, u32 height, int blur_ext, float* kernel, float* tmp );
 
 
 // BSP tree
@@ -335,4 +340,5 @@ struct BSPTree
 	
 	BSPNode* root;
 };
+
 

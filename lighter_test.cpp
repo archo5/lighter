@@ -156,6 +156,7 @@ void testfunc_basic()
 	// MESH 1 INSTANCE 1
 	ltr_MeshInstanceInfo m1inst1;
 	memset( &m1inst1, 0, sizeof(m1inst1) );
+	m1inst1.importance = 1;
 	float matrix1[16] = { 1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1 };
 	memcpy( m1inst1.matrix, matrix1, sizeof(matrix1) );
 	LTR_VERIFY( ltr_MeshAddInstance( mesh1, &m1inst1 ) );
@@ -163,6 +164,7 @@ void testfunc_basic()
 	// MESH 1 INSTANCE 2
 	ltr_MeshInstanceInfo m1inst2;
 	memset( &m1inst2, 0, sizeof(m1inst2) );
+	m1inst2.importance = 1;
 	float c = cos( 0.5f ) * 0.2f, s = sin( 0.5f ) * 0.2f;
 	float matrix2[16] = { c, s, 0, 0,  -s, c, 0, 0,  0, 0, 0.2f, 0,  0, 0, 0.5f, 1 };
 	memcpy( m1inst2.matrix, matrix2, sizeof(matrix2) );
@@ -171,6 +173,7 @@ void testfunc_basic()
 	// MESH 1 INSTANCE 3
 	ltr_MeshInstanceInfo m1inst3;
 	memset( &m1inst3, 0, sizeof(m1inst3) );
+	m1inst3.importance = 1;
 	float matrix3[16] = { 1.9f, 0, 0, 0,  0, 1.9f, 0, 0,  0, 0, 1.9f, 0,  0, 0, -0.5f, 1 };
 	memcpy( m1inst3.matrix, matrix3, sizeof(matrix3) );
 	LTR_VERIFY( ltr_MeshAddInstance( mesh1, &m1inst3 ) );
@@ -234,6 +237,7 @@ void testfunc_mesh1()
 	// MESH 1 INSTANCE 1
 	ltr_MeshInstanceInfo m1inst1;
 	memset( &m1inst1, 0, sizeof(m1inst1) );
+	m1inst1.importance = 1;
 	float matrix1[16] = { 1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1 };
 	memcpy( m1inst1.matrix, matrix1, sizeof(matrix1) );
 	LTR_VERIFY( ltr_MeshAddInstance( mesh1, &m1inst1 ) );
@@ -243,6 +247,7 @@ void testfunc_mesh1()
 	{
 		{ LTR_LT_POINT, { -2.18f, -4.04f, 1.40f }, {0,0,0}, {0,0,0}, { 0.9f, 0.7f, 0.5f }, 16.0f, 1.0f, 0.1f, 5 },
 		{ LTR_LT_POINT, { 2.18f, 4.04f, 1.40f }, {0,0,0}, {0,0,0}, { 0.5f, 0.7f, 0.9f }, 16.0f, 1.0f, 0.1f, 5 },
+		{ LTR_LT_SPOT, { 0, 0, 1.60f }, {0,0,-1}, {1,0,0}, { 0.7f, 0.1f, 0.05f }, 16.0f, 1.0f, 0.1f, 5, 45.0f, 25.0f, 0.5f },
 	};
 	for( size_t lt = 0; lt < sizeof(lights)/sizeof(lights[0]); ++lt )
 		ltr_LightAdd( scene, &lights[ lt ] );

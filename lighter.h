@@ -87,6 +87,9 @@ typedef struct ltr_LightInfo
 	float power;
 	float light_radius;
 	int shadow_sample_count;
+	float spot_angle_out;
+	float spot_angle_in;
+	float spot_curve;
 }
 ltr_LightInfo;
 
@@ -107,7 +110,9 @@ typedef struct ltr_Config
 	);
 	// limits & factors
 	size_t max_tree_memory;
-	size_t max_lightmap_size;
+	u32 max_lightmap_size;
+	u32 default_width;
+	u32 default_height;
 	float global_size_factor;
 	// lightmap generation
 	ltr_VEC3 clear_color; /* the color used outside triangles */
@@ -169,6 +174,9 @@ LTRAPI void ltr_LightAdd( ltr_Scene* scene, ltr_LightInfo* li );
 // - data output
 LTRAPI void ltr_GetWorkOutputInfo( ltr_Scene* scene, ltr_WorkOutputInfo* woutinfo );
 LTRAPI LTRBOOL ltr_GetWorkOutput( ltr_Scene* scene, u32 which, ltr_WorkOutput* wout );
+
+// - misc.
+LTRAPI u32 ltr_NextPowerOfTwo( u32 x );
 
 
 #ifdef __cplusplus

@@ -20,10 +20,11 @@ extern "C" LTRBOOL ltr_DefaultSizeFunc
 	float size = config->global_size_factor * sqrtf( computed_surface_area ) * inst_importance;
 	if( size < 1 )
 		size = 1;
-	if( size > config->max_lightmap_size )
+	u32 ui_size = ltr_NextPowerOfTwo( size );
+	if( ui_size > config->max_lightmap_size )
 		return 0;
-	out_size[0] = size;
-	out_size[1] = size;
+	out_size[0] = ui_size;
+	out_size[1] = ui_size;
 	return 1;
 }
 
@@ -58,6 +59,7 @@ struct ltr_MeshInstance
 	// input
 	ltr_Mesh* mesh;
 	std::string m_ident;
+	float m_importance;
 	Mat4 matrix;
 	u32 lm_width;
 	u32 lm_height;
@@ -86,6 +88,9 @@ typedef struct ltr_Light
 	float power;
 	float light_radius;
 	int shadow_sample_count;
+	float spot_angle_out;
+	float spot_angle_in;
+	float spot_curve;
 }
 ltr_Light;
 typedef std::vector< ltr_Light > LightVector;
@@ -225,6 +230,45 @@ void ltr_Scene::DoWork()
 			Vec2 lsize = Vec2::Create( mi->lm_width, mi->lm_height );
 			for( size_t i = 0; i < mi->m_ltex.size(); ++i )
 				mi->m_ltex[ i ] = mesh->m_vtex2[ i ] * lsize - Vec2::Create(0.5f);
+			
+			// compute total area
+			float total_area = 0.0f;
+			for( u32 part = 0; part < mesh->m_parts.size(); ++part )
+			{
+				const ltr_MeshPart& mp = mesh->m_parts[ part ];
+				if( mp.m_tristrip )
+				{
+					for( u32 tri = 2; tri < mp.m_indexCount; ++tri )
+					{
+						u32 tridx1 = tri, tridx2 = tri + 1 + tri % 2, tridx3 = tri + 2 - tri % 2;
+						tridx1 = mesh->m_indices[ tridx1 ];
+						tridx2 = mesh->m_indices[ tridx2 ];
+						tridx3 = mesh->m_indices[ tridx3 ];
+						total_area += TriangleArea( mi->m_vpos[ tridx1 ], mi->m_vpos[ tridx2 ], mi->m_vpos[ tridx3 ] );
+					}
+				}
+				else
+				{
+					for( u32 tri = 0; tri < mp.m_indexCount; tri += 3 )
+					{
+						u32 tridx1 = tri, tridx2 = tri + 1, tridx3 = tri + 2;
+						tridx1 = mesh->m_indices[ tridx1 ];
+						tridx2 = mesh->m_indices[ tridx2 ];
+						tridx3 = mesh->m_indices[ tridx3 ];
+						total_area += TriangleArea( mi->m_vpos[ tridx1 ], mi->m_vpos[ tridx2 ], mi->m_vpos[ tridx3 ] );
+					}
+				}
+			}
+			
+			// call lightmap resizer
+			u32 out_size[2] = { config.default_width, config.default_height };
+			if( !config.size_fn( &config, mesh->m_ident.c_str(), mesh->m_ident.size(), mi->m_ident.c_str(), mi->m_ident.size(), total_area, mi->m_importance, out_size ) )
+			{
+				out_size[0] = config.default_width;
+				out_size[1] = config.default_height;
+			}
+			mi->lm_width = out_size[0];
+			mi->lm_height = out_size[1];
 		}
 		break;
 		
@@ -333,6 +377,31 @@ void ltr_Scene::DoWork()
 					mi->m_lightmap[ i ] += light.color_rgb * ( f_dist * f_ndotl * f_vistest );
 				}
 			}
+			if( light.type == LTR_LT_SPOT )
+			{
+				float angle_out_rad = light.spot_angle_out / 180.0f * M_PI, angle_in_rad = light.spot_angle_in / 180.0f * M_PI;
+				if( angle_in_rad == angle_out_rad )
+					angle_in_rad -= SMALL_FLOAT;
+				float angle_diff = angle_in_rad - angle_out_rad;
+				for( size_t i = 0; i < mi->m_lightmap.size(); ++i )
+				{
+					Vec3& SP = mi->m_samples_pos[ i ];
+					Vec3& SN = mi->m_samples_nrm[ i ];
+					Vec3 sample2light = light.position - SP;
+					float dist = sample2light.Length();
+					if( dist )
+						sample2light /= dist;
+					float f_dist = pow( 1 - TMIN( 1.0f, dist / light.range ), light.power );
+					float f_ndotl = TMAX( 0.0f, Vec3Dot( sample2light, SN ) );
+					float angle = acosf( TMIN( 1.0f, Vec3Dot( sample2light, -light.direction ) ) );
+					float f_dir = TMAX( 0.0f, TMIN( 1.0f, ( angle - angle_out_rad ) / angle_diff ) );
+					f_dir = pow( f_dir, light.spot_curve );
+					if( f_dist * f_ndotl * f_dir < SMALL_FLOAT )
+						continue;
+					float f_vistest = VisibilityTest( SP, &light );
+					mi->m_lightmap[ i ] += light.color_rgb * ( f_dist * f_ndotl * f_dir * f_vistest );
+				}
+			}
 		}
 		break;
 		
@@ -394,6 +463,22 @@ void ltr_Scene::DoWork()
 				image_rgb[ loc+0 ] = LMC.x;
 				image_rgb[ loc+1 ] = LMC.y;
 				image_rgb[ loc+2 ] = LMC.z;
+			}
+			
+			if( config.blur_size )
+			{
+				int blur_ext = ceil( config.blur_size );
+				int blurbuf_size = ( TMAX( mi->lm_width, mi->lm_height ) + blur_ext * 2 ) * 3;
+				int kernel_size = blur_ext * 2 + 1;
+				float* image_tmp_rgb = new float[ mi->lm_width * mi->lm_height * 3 + blurbuf_size + kernel_size ];
+				float* blur_tmp_rgb = image_tmp_rgb + mi->lm_width * mi->lm_height * 3;
+				float* kernel_rgb = blur_tmp_rgb + blurbuf_size;
+				
+				Generate_Gaussian_Kernel( kernel_rgb, blur_ext, config.blur_size );
+				Convolve_Transpose( image_rgb, image_tmp_rgb, mi->lm_width, mi->lm_height, blur_ext, kernel_rgb, blur_tmp_rgb );
+				Convolve_Transpose( image_tmp_rgb, image_rgb, mi->lm_height, mi->lm_width, blur_ext, kernel_rgb, blur_tmp_rgb );
+				
+				delete [] image_tmp_rgb;
 			}
 			
 			ltr_WorkOutput wo =
@@ -490,7 +575,9 @@ void ltr_GetConfig( ltr_Config* cfg, ltr_Scene* opt_scene )
 	
 	cfg->max_tree_memory = 128 * 1024 * 1024;
 	cfg->max_lightmap_size = 1024;
-	cfg->global_size_factor = 16;
+	cfg->default_width = 64;
+	cfg->default_height = 64;
+	cfg->global_size_factor = 4;
 	
 	LTR_VEC3_SET( cfg->clear_color, 0, 0, 0 );
 	LTR_VEC3_SET( cfg->ambient_color, 0, 0, 0 );
@@ -503,7 +590,7 @@ void ltr_GetConfig( ltr_Config* cfg, ltr_Scene* opt_scene )
 	LTR_VEC3_SET( cfg->ao_color_rgb, 0, 0, 0 );
 	cfg->ao_num_samples = 149;
 	
-	cfg->blur_size = 0.8f;
+	cfg->blur_size = 0.7f;
 }
 
 LTRCODE ltr_SetConfig( ltr_Scene* scene, ltr_Config* cfg )
@@ -566,6 +653,7 @@ LTRBOOL ltr_MeshAddInstance( ltr_Mesh* mesh, ltr_MeshInstanceInfo* mii )
 {
 	ltr_MeshInstance* mi = new ltr_MeshInstance;
 	mi->mesh = mesh;
+	mi->m_importance = mii->importance;
 	if( mii->ident )
 		mi->m_ident.assign( mii->ident, mii->ident_size );
 	memcpy( mi->matrix.a, mii->matrix, sizeof(Mat4) );
@@ -581,13 +669,16 @@ void ltr_LightAdd( ltr_Scene* scene, ltr_LightInfo* li )
 	{
 		li->type,
 		Vec3::CreateFromPtr( li->position ),
-		Vec3::CreateFromPtr( li->direction ),
-		Vec3::CreateFromPtr( li->up_direction ),
+		Vec3::CreateFromPtr( li->direction ).Normalized(),
+		Vec3::CreateFromPtr( li->up_direction ).Normalized(),
 		Vec3::CreateFromPtr( li->color_rgb ),
 		li->range,
 		li->power,
 		li->light_radius,
-		TMAX( 1, li->shadow_sample_count )
+		TMAX( 1, li->shadow_sample_count ),
+		li->spot_angle_out,
+		li->spot_angle_in,
+		li->spot_curve,
 	};
 	scene->m_lights.push_back( L );
 }
@@ -604,6 +695,18 @@ LTRBOOL ltr_GetWorkOutput( ltr_Scene* scene, u32 which, ltr_WorkOutput* wout )
 		return 0;
 	*wout = scene->m_workOutput[ which ];
 	return 1;
+}
+
+
+u32 ltr_NextPowerOfTwo( u32 x )
+{
+	x--;
+	x |= x >> 1;
+	x |= x >> 2;
+	x |= x >> 4;
+	x |= x >> 8;
+	x |= x >> 16;
+	return x + 1;
 }
 
 
