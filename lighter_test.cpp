@@ -275,8 +275,97 @@ void testfunc_mesh1()
 	ltr_DestroyScene( scene );
 }
 
+void testfunc_mesh2()
+{
+	puts( "LIGHTER test [mesh2]" );
+	
+	ltr_Scene* scene = ltr_CreateScene();
+	
+	ltr_Config cfg;
+	ltr_GetConfig( &cfg, scene );
+	cfg.ao_distance = 2;
+	ltr_SetConfig( scene, &cfg );
+	
+	// MESH 1
+	ltr_Mesh* mesh1 = ltr_CreateMesh( scene, "mesh1", strlen("mesh1") );
+	testmesh M;
+	LTR_VERIFY( (int) M.Load( "bin/test-set2-mesh1.data" ) );
+	
+	// MESH 1 PART 1
+	ltr_MeshPartInfo m1part1 =
+	{
+		&M.positions[0], &M.normals[0], &M.texcoords[0], &M.texcoords[0],
+		sizeof(float)*3, sizeof(float)*3, sizeof(float)*2, sizeof(float)*2,
+		&M.indices[0], (u32) M.positions.size(), (u32) M.indices.size(), 0
+	};
+	LTR_VERIFY( ltr_MeshAddPart( mesh1, &m1part1 ) );
+	
+	// MESH 1 INSTANCE 1
+	ltr_MeshInstanceInfo m1inst1;
+	memset( &m1inst1, 0, sizeof(m1inst1) );
+	m1inst1.importance = 1;
+	float matrix1[16] = { 1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1 };
+	memcpy( m1inst1.matrix, matrix1, sizeof(matrix1) );
+	LTR_VERIFY( ltr_MeshAddInstance( mesh1, &m1inst1 ) );
+	
+	// MESH 2
+	ltr_Mesh* mesh2 = ltr_CreateMesh( scene, "mesh2", strlen("mesh2") );
+	testmesh M2;
+	LTR_VERIFY( (int) M2.Load( "bin/test-set2-mesh2.data" ) );
+	
+	// MESH 2 PART 1
+	ltr_MeshPartInfo m2part1 =
+	{
+		&M2.positions[0], &M2.normals[0], &M2.texcoords[0], &M2.texcoords[0],
+		sizeof(float)*3, sizeof(float)*3, sizeof(float)*2, sizeof(float)*2,
+		&M2.indices[0], (u32) M2.positions.size(), (u32) M2.indices.size(), 0
+	};
+	LTR_VERIFY( ltr_MeshAddPart( mesh2, &m2part1 ) );
+	
+	// MESH 2 INSTANCE 1
+	ltr_MeshInstanceInfo m2inst1;
+	memset( &m2inst1, 0, sizeof(m2inst1) );
+	m2inst1.importance = 0.3f;
+	float matrix2[16] = { 1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1 };
+	memcpy( m2inst1.matrix, matrix2, sizeof(matrix2) );
+	LTR_VERIFY( ltr_MeshAddInstance( mesh2, &m2inst1 ) );
+	
+	// LIGHTS
+	ltr_LightInfo lights[] =
+	{
+		{ LTR_LT_POINT, { -2.18f, -4.04f, 1.40f }, {0,0,0}, {0,0,0}, { 0.9f, 0.7f, 0.5f }, 16.0f, 1.0f, 0.1f, 5,  0, 0, 0 },
+		{ LTR_LT_POINT, { 2.18f, 4.04f, 1.40f }, {0,0,0}, {0,0,0}, { 0.5f, 0.7f, 0.9f }, 16.0f, 1.0f, 0.1f, 5,  0, 0, 0 },
+		{ LTR_LT_SPOT, { 0, 0, 1.60f }, {0,0,-1}, {1,0,0}, { 0.7f, 0.1f, 0.05f }, 16.0f, 1.0f, 0.1f, 5, 45.0f, 25.0f, 0.5f },
+		{ LTR_LT_DIRECT, {0,0,0}, { -1, -1, -1 }, {0,0,0}, { 0.6f, 0.55f, 0.5f }, 1000.0f, 1.0f, 0.0f, 1,  0, 0, 0 },
+	};
+	for( size_t lt = 0; lt < sizeof(lights)/sizeof(lights[0]); ++lt )
+		ltr_LightAdd( scene, &lights[ lt ] );
+	
+	// --- DO WORK ---
+	ltr_WorkInfo winfo;
+	while( ltr_DoWork( scene, &winfo ) == 0 )
+	{
+		printf( "%s [%d/%d] ... %d%%\n", winfo.stage, (int) winfo.part,
+			(int) winfo.item_count, (int) ( winfo.item_count ? winfo.part * 100 / winfo.item_count : 0 ) );
+	}
+	
+	// --- RETURN OUTPUT ---
+	ltr_WorkOutput wout;
+	ltr_WorkOutputInfo woutinfo;
+	ltr_GetWorkOutputInfo( scene, &woutinfo );
+	for( u32 lm = 0; lm < woutinfo.lightmap_count; ++lm )
+	{
+		LTR_VERIFY( ltr_GetWorkOutput( scene, lm, &wout ) );
+		char namebfr[ 64 ];
+		sprintf( namebfr, "%d.tga", (int) wout.uid );
+		dumpimg( namebfr, wout.lightmap_rgb, wout.width, wout.height );
+	}
+	
+	ltr_DestroyScene( scene );
+}
 
-const char* testname = "mesh1";
+
+const char* testname = "mesh2";
 
 int main( int argc, char* argv[] )
 {
@@ -287,6 +376,8 @@ int main( int argc, char* argv[] )
 		testfunc_basic();
 	else if( strcmp( testname, "mesh1" ) == 0 )
 		testfunc_mesh1();
+	else if( strcmp( testname, "mesh2" ) == 0 )
+		testfunc_mesh2();
 	else
 		printf( "TEST NOT FOUND: %s\n", testname );
 }

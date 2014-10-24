@@ -227,10 +227,6 @@ void ltr_Scene::DoWork()
 			TransformPositions( &mi->m_vpos[0], &mesh->m_vpos[0], mesh->m_vpos.size(), mi->matrix );
 			TransformNormals( &mi->m_vnrm[0], &mesh->m_vnrm[0], mesh->m_vnrm.size(), mi->matrix );
 			
-			Vec2 lsize = Vec2::Create( mi->lm_width, mi->lm_height );
-			for( size_t i = 0; i < mi->m_ltex.size(); ++i )
-				mi->m_ltex[ i ] = mesh->m_vtex2[ i ] * lsize - Vec2::Create(0.5f);
-			
 			// compute total area
 			float total_area = 0.0f;
 			for( u32 part = 0; part < mesh->m_parts.size(); ++part )
@@ -269,6 +265,11 @@ void ltr_Scene::DoWork()
 			}
 			mi->lm_width = out_size[0];
 			mi->lm_height = out_size[1];
+			
+			// transform texcoords
+			Vec2 lsize = Vec2::Create( mi->lm_width, mi->lm_height );
+			for( size_t i = 0; i < mi->m_ltex.size(); ++i )
+				mi->m_ltex[ i ] = mesh->m_vtex2[ i ] * lsize - Vec2::Create(0.5f);
 		}
 		break;
 		
@@ -400,6 +401,29 @@ void ltr_Scene::DoWork()
 						continue;
 					float f_vistest = VisibilityTest( SP, &light );
 					mi->m_lightmap[ i ] += light.color_rgb * ( f_dist * f_ndotl * f_dir * f_vistest );
+				}
+			}
+			else if( light.type == LTR_LT_DIRECT )
+			{
+				int num_samples = TMAX( 1, light.shadow_sample_count );
+				for( size_t i = 0; i < mi->m_lightmap.size(); ++i )
+				{
+					Vec3& SP = mi->m_samples_pos[ i ];
+					Vec3& SN = mi->m_samples_nrm[ i ];
+					float f_ndotl = TMAX( 0.0f, Vec3Dot( -light.direction, SN ) );
+					if( f_ndotl < SMALL_FLOAT )
+						continue;
+					float f_vistest = 0.0f;
+					for( int s = 0; s < num_samples; ++s )
+					{
+						Vec3 ray_dir = Vec3::CreateRandomVectorDirDvg( -light.direction, light.light_radius, light.range );
+						float hit = VisibilityTest( SP, SP + ray_dir );
+						if( hit < 1.0f )
+							f_vistest += 1.0f;
+					}
+					f_vistest /= num_samples;
+					f_vistest = 1.0f - f_vistest;
+					mi->m_lightmap[ i ] += light.color_rgb * ( f_ndotl * f_vistest );
 				}
 			}
 		}
@@ -588,7 +612,7 @@ void ltr_GetConfig( ltr_Config* cfg, ltr_Scene* opt_scene )
 	cfg->ao_effect = 0;
 	cfg->ao_divergence = 0;
 	LTR_VEC3_SET( cfg->ao_color_rgb, 0, 0, 0 );
-	cfg->ao_num_samples = 149;
+	cfg->ao_num_samples = 49;
 	
 	cfg->blur_size = 0.7f;
 }

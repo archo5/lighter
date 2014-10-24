@@ -408,7 +408,7 @@ void BSPNode::AddTriangleSplit( BSPTriangle* tri, int depth )
 		S3 = TLERP( P3, P1, fabs( proj3 / td31 ) );
 	
 	static int wat = 0;
-	if( wat++ > 1000 )
+	if( wat++ > 10000 )
 		puts( "TODO FIX LEAK" );
 	
 	// determine split edges and act accordingly
