@@ -284,6 +284,7 @@ void testfunc_mesh2()
 	ltr_Config cfg;
 	ltr_GetConfig( &cfg, scene );
 	cfg.ao_distance = 2;
+	cfg.global_size_factor = 2;
 	ltr_SetConfig( scene, &cfg );
 	
 	// MESH 1

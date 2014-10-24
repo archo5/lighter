@@ -205,7 +205,7 @@ float ltr_Scene::VisibilityTest( const Vec3& A, const Vec3& B )
 	Vec3 diffnorm = ( B - A ).Normalized();
 	Vec3 mA = A + diffnorm * SMALL_FLOAT;
 	Vec3 mB = B - diffnorm * SMALL_FLOAT;
-	return m_triTree.IntersectRay( mB, mA );
+	return m_triTree.IntersectRay( mA, mB );
 }
 
 void ltr_Scene::DoWork()
@@ -322,7 +322,10 @@ void ltr_Scene::DoWork()
 			TMEMSET( &m_tmpRender2[0], m_tmpRender2.size(), Vec3::Create(0) );
 			
 			// first do excessive rasterization
-			RasterizeInstance( mi, 1.0f );
+			RasterizeInstance( mi, 2.0f + SMALL_FLOAT );
+			RasterizeInstance( mi, 1.5f + SMALL_FLOAT );
+			RasterizeInstance( mi, 1.0f + SMALL_FLOAT );
+			RasterizeInstance( mi, 0.5f + SMALL_FLOAT );
 			
 			// then do proper rasterization
 			RasterizeInstance( mi, 0.0f );
@@ -414,15 +417,26 @@ void ltr_Scene::DoWork()
 					if( f_ndotl < SMALL_FLOAT )
 						continue;
 					float f_vistest = 0.0f;
+					Vec3 ray_origin = SP;
 					for( int s = 0; s < num_samples; ++s )
 					{
-						Vec3 ray_dir = Vec3::CreateRandomVectorDirDvg( -light.direction, light.light_radius, light.range );
-						float hit = VisibilityTest( SP, SP + ray_dir );
+						Vec3 ray_dir = Vec3::CreateRandomVectorDirDvg( -light.direction, light.light_radius ) * light.range;
+						float hit = VisibilityTest( ray_origin, ray_origin + ray_dir );
 						if( hit < 1.0f )
 							f_vistest += 1.0f;
 					}
 					f_vistest /= num_samples;
 					f_vistest = 1.0f - f_vistest;
+				//	if( mi->m_samples_loc[ i ] >= 209 + 14 * mi->lm_width &&
+				//		mi->m_samples_loc[ i ] <= 211 + 14 * mi->lm_width && mi_id == 0 )
+				//	{
+				//		printf( "PIXEL: %d\n", mi->m_samples_loc[ i ] );
+				//		printf( "VISTEST = %f\n", f_vistest );
+				//		printf( "POS = %f %f %f\n", SP.x, SP.y, SP.z );
+				//		printf( "NRM = %f %f %f\n", SN.x, SN.y, SN.z );
+				//	//	if( mi->m_samples_loc[ i ] == 211 + 14 * mi->lm_width )
+				//	//		exit(0);
+				//	}
 					mi->m_lightmap[ i ] += light.color_rgb * ( f_ndotl * f_vistest );
 				}
 			}
@@ -451,7 +465,7 @@ void ltr_Scene::DoWork()
 				float ao_factor = 0;
 				for( int s = 0; s < num_samples; ++s )
 				{
-					Vec3 ray_dir = Vec3::CreateRandomVectorDirDvg( SN, ao_divergence, ao_distance );
+					Vec3 ray_dir = Vec3::CreateRandomVectorDirDvg( SN, ao_divergence ) * ao_distance;
 					float hit = VisibilityTest( ray_origin, ray_origin + ray_dir );
 					if( hit < 1.0f )
 						ao_factor += 1.0f - hit;
@@ -607,14 +621,14 @@ void ltr_GetConfig( ltr_Config* cfg, ltr_Scene* opt_scene )
 	LTR_VEC3_SET( cfg->ambient_color, 0, 0, 0 );
 	
 	cfg->ao_distance = 0;
-	cfg->ao_multiplier = 2;
+	cfg->ao_multiplier = 1;
 	cfg->ao_falloff = 2;
 	cfg->ao_effect = 0;
 	cfg->ao_divergence = 0;
 	LTR_VEC3_SET( cfg->ao_color_rgb, 0, 0, 0 );
-	cfg->ao_num_samples = 49;
+	cfg->ao_num_samples = 17;
 	
-	cfg->blur_size = 0.7f;
+	cfg->blur_size = 0.5f;
 }
 
 LTRCODE ltr_SetConfig( ltr_Scene* scene, ltr_Config* cfg )
@@ -682,7 +696,7 @@ LTRBOOL ltr_MeshAddInstance( ltr_Mesh* mesh, ltr_MeshInstanceInfo* mii )
 		mi->m_ident.assign( mii->ident, mii->ident_size );
 	memcpy( mi->matrix.a, mii->matrix, sizeof(Mat4) );
 	mesh->m_scene->m_meshInstances.push_back( mi );
-	mi->lm_width = 128; // TODO: configurable
+	mi->lm_width = 128;
 	mi->lm_height = 128;
 	return 1;
 }

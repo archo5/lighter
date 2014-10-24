@@ -228,9 +228,13 @@ void RasterizeTriangle2D_x2_ex( Vec3* img1, Vec3* img2, i32 width, i32 height, f
 	if( vcross == 0 )
 		return;
 	
-	float margin_ep12 = margin / p1p2.Length();
-	float margin_ep13 = margin / p1p3.Length();
-	float marginsum_1 = margin_ep12 + margin_ep13 + 1;
+	Vec2 n1 = p1p2.Perp().Normalized();
+	Vec2 n2 = ( p3 - p2 ).Perp().Normalized();
+	Vec2 n3 = -p1p3.Perp().Normalized();
+	float d1 = Vec2Dot( n1, p1 );
+	float d2 = Vec2Dot( n2, p2 );
+	float d3 = Vec2Dot( n3, p3 );
+	float MG = margin;
 	
 	Vec3 va1va2 = va2 - va1, va1va3 = va3 - va1;
 	Vec3 vb1vb2 = vb2 - vb1, vb1vb3 = vb3 - vb1;
@@ -244,7 +248,9 @@ void RasterizeTriangle2D_x2_ex( Vec3* img1, Vec3* img2, i32 width, i32 height, f
 			float s = Vec2Cross( q, p1p3 ) / vcross;
 			float t = Vec2Cross( p1p2, q ) / vcross;
 			
-			if( ( s >= -margin_ep13 ) && ( t >= -margin_ep12 ) && ( s + t <= marginsum_1 ) )
+			Vec2 p = { (float) x, (float) y };
+			float pd1 = Vec2Dot( p, n1 ), pd2 = Vec2Dot( p, n2 ), pd3 = Vec2Dot( p, n3 );
+			if( ( pd1 <= d1 + MG && pd2 <= d2 + MG && pd3 <= d3 + MG ) || ( pd1 + MG >= d1 && pd2 + MG >= d2 && pd3 + MG >= d3 ) )
 			{
 				img1[ x + width * y ] = va1 + va1va2 * s + va1va3 * t;
 				img2[ x + width * y ] = vb1 + vb1vb2 * s + vb1vb3 * t;
@@ -269,7 +275,7 @@ float IntersectLineSegmentTriangle( const Vec3& L1, const Vec3& L2, const Vec3& 
 	Vec3 u = P2 - P1;
 	Vec3 v = P3 - P1;
 	Vec3 n = Vec3Cross( u, v );
-	if( n.IsZero() )
+	if( n.NearZero() )
 		return 2.0f;
 	
 	Vec3 dir = L2 - L1;
@@ -357,6 +363,9 @@ void Convolve_Transpose( float* src, float* dst, u32 width, u32 height, int cone
 
 void BSPNode::AddTriangle( BSPTriangle* tri, int depth )
 {
+	if( !tri->CheckIsUseful() )
+		return;
+	
 	if( front_node ) // node already split
 	{
 		AddTriangleSplit( tri, depth + 1 );
@@ -411,40 +420,8 @@ void BSPNode::AddTriangleSplit( BSPTriangle* tri, int depth )
 	if( wat++ > 10000 )
 		puts( "TODO FIX LEAK" );
 	
-	// determine split edges and act accordingly
-	if( proj1 * proj2 < 0 )
-	{
-		if( proj2 * proj3 < 0 )
-		{
-			// intersection at EDGE 1 & EDGE 2
-			BSPTriangle tri1 = { S1, P2, S2 };
-			( proj2 > 0 ? front_node : back_node )->AddTriangle( &tri1, depth );
-			BSPTriangle tri2 = { S2, P3, P1 };
-			( proj2 < 0 ? front_node : back_node )->AddTriangle( &tri2, depth );
-			BSPTriangle tri3 = { P1, S1, S2 };
-			( proj2 < 0 ? front_node : back_node )->AddTriangle( &tri3, depth );
-		}
-		else
-		{
-			// intersection at EDGE 3 & EDGE 1
-			BSPTriangle tri1 = { S3, P1, S1 };
-			( proj1 > 0 ? front_node : back_node )->AddTriangle( &tri1, depth );
-			BSPTriangle tri2 = { S1, P2, P3 };
-			( proj1 < 0 ? front_node : back_node )->AddTriangle( &tri2, depth );
-			BSPTriangle tri3 = { P3, S3, S1 };
-			( proj1 < 0 ? front_node : back_node )->AddTriangle( &tri3, depth );
-		}
-	}
-	else
-	{
-		// intersection at EDGE 2 & EDGE 3
-		BSPTriangle tri1 = { S2, P3, S3 };
-		( proj3 > 0 ? front_node : back_node )->AddTriangle( &tri1, depth );
-		BSPTriangle tri2 = { S3, P1, P2 };
-		( proj3 < 0 ? front_node : back_node )->AddTriangle( &tri2, depth );
-		BSPTriangle tri3 = { P2, S2, S3 };
-		( proj3 < 0 ? front_node : back_node )->AddTriangle( &tri3, depth );
-	}
+	front_node->AddTriangle( tri, depth );
+	back_node->AddTriangle( tri, depth );
 }
 
 float BSPNode::IntersectRay( const Vec3& from, const Vec3& to )
@@ -475,8 +452,10 @@ float BSPNode::IntersectRay( const Vec3& from, const Vec3& to )
 		{
 			BSPTriangle& T = triangles[i];
 			float hit = IntersectLineSegmentTriangle( from, to, T.P1, T.P2, T.P3 );
-			if( hit < closest_hit )
+			if( hit < closest_hit )//{
 				closest_hit = hit;
+				// printf( "HIT %f from=%.2f %.2f %.2f to=%.2f %.2f %.2f p1=%.4f %.4f %.4f p2=%.4f %.4f %.4f p3=%.4f %.4f %.4f",
+				// hit,from.x,from.y,from.z,to.x,to.y,to.z,T.P1.x,T.P1.y,T.P1.z,T.P2.x,T.P2.y,T.P2.z,T.P3.x,T.P3.y,T.P3.z);}
 		}
 		return closest_hit;
 	}

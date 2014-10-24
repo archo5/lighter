@@ -82,7 +82,21 @@ struct Vec2
 	FORCEINLINE bool operator == ( const Vec2& o ) const { return x == o.x && y == o.y; }
 	FORCEINLINE bool operator != ( const Vec2& o ) const { return x != o.x || y != o.y; }
 	
-	FORCEINLINE float Length() const { return sqrtf( x * x + y * y ); }
+	FORCEINLINE Vec2 Perp() const { Vec2 v = { y, -x }; return v; }
+	FORCEINLINE float LengthSq() const { return x * x + y * y; }
+	FORCEINLINE float Length() const { return sqrtf( LengthSq() ); }
+	FORCEINLINE Vec2 Normalized() const
+	{
+		float lensq = LengthSq();
+		if( lensq == 0 )
+		{
+			Vec2 v = { 0, 0 };
+			return v;
+		}
+		float invlen = 1.0f / sqrtf( lensq );
+		Vec2 v = { x * invlen, y * invlen };
+		return v;
+	}
 	
 	void Dump( FILE* f ) const
 	{
@@ -90,6 +104,7 @@ struct Vec2
 	}
 };
 
+FORCEINLINE float Vec2Dot( const Vec2& v1, const Vec2& v2 ){ return v1.x * v2.x + v1.y * v2.y; }
 FORCEINLINE float Vec2Cross( const Vec2& v1, const Vec2& v2 )
 {
 	return ( v1.x * v2.y ) - ( v1.y * v2.x );
@@ -112,7 +127,7 @@ struct Vec3
 		Vec3 v = { ac * bs * d, as * bs * d, bc * d };
 		return v;
 	}
-	static FORCEINLINE Vec3 CreateRandomVectorDirDvg( const Vec3& dir, float dvg, float maxdist );
+	static FORCEINLINE Vec3 CreateRandomVectorDirDvg( const Vec3& dir, float dvg );
 	
 	FORCEINLINE Vec3 operator + () const { return *this; }
 	FORCEINLINE Vec3 operator - () const { Vec3 v = { -x, -y, -z }; return v; }
@@ -141,6 +156,7 @@ struct Vec3
 	FORCEINLINE bool operator != ( const Vec3& o ) const { return x != o.x || y != o.y || z != o.z; }
 	
 	FORCEINLINE bool IsZero() const { return x == 0 && y == 0 && z == 0; }
+	FORCEINLINE bool NearZero() const { return fabs(x) < SMALL_FLOAT && fabs(y) < SMALL_FLOAT && fabs(z) < SMALL_FLOAT; }
 	FORCEINLINE float LengthSq() const { return x * x + y * y + z * z; }
 	FORCEINLINE float Length() const { return sqrtf( LengthSq() ); }
 	FORCEINLINE Vec3 Normalized() const
@@ -179,17 +195,16 @@ FORCEINLINE Vec3 Vec3Cross( const Vec3& v1, const Vec3& v2 )
 	return out;
 }
 
-Vec3 Vec3::CreateRandomVectorDirDvg( const Vec3& dir, float dvg, float maxdist )
+Vec3 Vec3::CreateRandomVectorDirDvg( const Vec3& dir, float dvg )
 {
 	float a = randf() * M_PI * 2;
 	float b = randf() * M_PI * dvg;
-	float d = randf() * maxdist;
 	float ac = cos( a ), as = sin( a );
 	float bc = cos( b ), bs = sin( b );
-	Vec3 diffvec = { dir.y, dir.z, dir.x };
+	Vec3 diffvec = { dir.y, -dir.z, dir.x };
 	Vec3 up = Vec3Cross( dir, diffvec ).Normalized();
 	Vec3 rt = Vec3Cross( dir, up );
-	return ( ac * bs * rt + as * bs * up + bc * dir ) * d;
+	return ac * bs * rt + as * bs * up + bc * dir;
 }
 
 
@@ -287,6 +302,12 @@ void Convolve_Transpose( float* src, float* dst, u32 width, u32 height, int blur
 struct BSPTriangle
 {
 	Vec3 P1, P2, P3;
+	
+	bool CheckIsUseful() const
+	{
+		Vec3 e1 = P2 - P1, e2 = P3 - P1;
+		return !Vec3Cross( e1, e2 ).NearZero();
+	}
 };
 typedef std::vector< BSPTriangle > BSPTriVector;
 
