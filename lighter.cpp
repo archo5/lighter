@@ -4,8 +4,7 @@
 
 
 
-
-extern "C" LTRBOOL ltr_DefaultSizeFunc
+LTRBOOL ltr_DefaultSizeFunc
 (
 	ltr_Config* config,
 	const char* mesh_ident,

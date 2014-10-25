@@ -10,10 +10,14 @@ extern "C" {
 #endif
 
 
+#if defined(_WIN32) && !defined(LTR_STATIC)
 #ifdef LTRBUILD
 #define LTRAPI __declspec(dllexport)
 #else
 #define LTRAPI __declspec(dllimport)
+#endif
+#else
+#define LTRAPI
 #endif
 
 
@@ -52,15 +56,15 @@ ltr_WorkInfo;
 
 typedef struct ltr_MeshPartInfo
 {
-	void* positions_f3;
-	void* normals_f3;
-	void* texcoords1_f2;
-	void* texcoords2_f2;
+	const void* positions_f3;
+	const void* normals_f3;
+	const void* texcoords1_f2;
+	const void* texcoords2_f2;
 	u32 stride_positions;
 	u32 stride_normals;
 	u32 stride_texcoords1;
 	u32 stride_texcoords2;
-	u32* indices;
+	const u32* indices;
 	u32 vertex_count;
 	u32 index_count;
 	int tristrip;
@@ -134,6 +138,18 @@ typedef struct ltr_Config
 	float blur_size;
 }
 ltr_Config;
+
+LTRAPI LTRBOOL ltr_DefaultSizeFunc
+(
+	ltr_Config* config,
+	const char* mesh_ident,
+	size_t mesh_ident_size,
+	const char* inst_ident,
+	size_t inst_ident_size,
+	float computed_surface_area,
+	float inst_importance,
+	u32 out_size[2]
+);
 
 typedef struct ltr_WorkOutputInfo
 {

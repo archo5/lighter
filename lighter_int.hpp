@@ -222,6 +222,12 @@ struct Mat4
 			for( int j = 0; j < 4; ++j )
 				m[i][j] = i == j;
 	}
+	static Mat4 CreateIdentity()
+	{
+		Mat4 m;
+		m.SetIdentity();
+		return m;
+	}
 	
 	FORCEINLINE Vec3 Transform( const Vec3& v, float w ) const
 	{
