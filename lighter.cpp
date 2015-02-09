@@ -60,6 +60,7 @@ struct ltr_MeshInstance
 	std::string m_ident;
 	float m_importance;
 	Mat4 matrix;
+	bool m_shadow;
 	u32 lm_width;
 	u32 lm_height;
 	
@@ -145,20 +146,22 @@ void ltr_Scene::RasterizeInstance( ltr_MeshInstance* mi, float margin )
 	for( u32 part = 0; part < mesh->m_parts.size(); ++part )
 	{
 		const ltr_MeshPart& mp = mesh->m_parts[ part ];
+		u32 O = mp.m_vertexOffset;
+		const u32* indexBase = &mesh->m_indices[ mp.m_indexOffset ];
 		if( mp.m_tristrip )
 		{
 			for( u32 tri = 2; tri < mp.m_indexCount; ++tri )
 			{
 				u32 tridx1 = tri, tridx2 = tri + 1 + tri % 2, tridx3 = tri + 2 - tri % 2;
-				tridx1 = mesh->m_indices[ tridx1 ];
-				tridx2 = mesh->m_indices[ tridx2 ];
-				tridx3 = mesh->m_indices[ tridx3 ];
+				tridx1 = indexBase[ tridx1 ];
+				tridx2 = indexBase[ tridx2 ];
+				tridx3 = indexBase[ tridx3 ];
 				RasterizeTriangle2D_x2_ex
 				(
 					&m_tmpRender1[0], &m_tmpRender2[0], mi->lm_width, mi->lm_height, margin,
-					mi->m_ltex[ tridx1 ], mi->m_ltex[ tridx2 ], mi->m_ltex[ tridx3 ],
-					mi->m_vpos[ tridx1 ], mi->m_vpos[ tridx2 ], mi->m_vpos[ tridx3 ],
-					mi->m_vnrm[ tridx1 ], mi->m_vnrm[ tridx2 ], mi->m_vnrm[ tridx3 ]
+					mi->m_ltex[ O + tridx1 ], mi->m_ltex[ O + tridx2 ], mi->m_ltex[ O + tridx3 ],
+					mi->m_vpos[ O + tridx1 ], mi->m_vpos[ O + tridx2 ], mi->m_vpos[ O + tridx3 ],
+					mi->m_vnrm[ O + tridx1 ], mi->m_vnrm[ O + tridx2 ], mi->m_vnrm[ O + tridx3 ]
 				);
 			}
 		}
@@ -167,15 +170,15 @@ void ltr_Scene::RasterizeInstance( ltr_MeshInstance* mi, float margin )
 			for( u32 tri = 0; tri < mp.m_indexCount; tri += 3 )
 			{
 				u32 tridx1 = tri, tridx2 = tri + 1, tridx3 = tri + 2;
-				tridx1 = mesh->m_indices[ tridx1 ];
-				tridx2 = mesh->m_indices[ tridx2 ];
-				tridx3 = mesh->m_indices[ tridx3 ];
+				tridx1 = indexBase[ tridx1 ];
+				tridx2 = indexBase[ tridx2 ];
+				tridx3 = indexBase[ tridx3 ];
 				RasterizeTriangle2D_x2_ex
 				(
 					&m_tmpRender1[0], &m_tmpRender2[0], mi->lm_width, mi->lm_height, margin,
-					mi->m_ltex[ tridx1 ], mi->m_ltex[ tridx2 ], mi->m_ltex[ tridx3 ],
-					mi->m_vpos[ tridx1 ], mi->m_vpos[ tridx2 ], mi->m_vpos[ tridx3 ],
-					mi->m_vnrm[ tridx1 ], mi->m_vnrm[ tridx2 ], mi->m_vnrm[ tridx3 ]
+					mi->m_ltex[ O + tridx1 ], mi->m_ltex[ O + tridx2 ], mi->m_ltex[ O + tridx3 ],
+					mi->m_vpos[ O + tridx1 ], mi->m_vpos[ O + tridx2 ], mi->m_vpos[ O + tridx3 ],
+					mi->m_vnrm[ O + tridx1 ], mi->m_vnrm[ O + tridx2 ], mi->m_vnrm[ O + tridx3 ]
 				);
 			}
 		}
@@ -231,15 +234,17 @@ void ltr_Scene::DoWork()
 			for( u32 part = 0; part < mesh->m_parts.size(); ++part )
 			{
 				const ltr_MeshPart& mp = mesh->m_parts[ part ];
+				const Vec3* vertexBase = &mi->m_vpos[ mp.m_vertexOffset ];
+				const u32* indexBase = &mesh->m_indices[ mp.m_indexOffset ];
 				if( mp.m_tristrip )
 				{
 					for( u32 tri = 2; tri < mp.m_indexCount; ++tri )
 					{
 						u32 tridx1 = tri, tridx2 = tri + 1 + tri % 2, tridx3 = tri + 2 - tri % 2;
-						tridx1 = mesh->m_indices[ tridx1 ];
-						tridx2 = mesh->m_indices[ tridx2 ];
-						tridx3 = mesh->m_indices[ tridx3 ];
-						total_area += TriangleArea( mi->m_vpos[ tridx1 ], mi->m_vpos[ tridx2 ], mi->m_vpos[ tridx3 ] );
+						tridx1 = indexBase[ tridx1 ];
+						tridx2 = indexBase[ tridx2 ];
+						tridx3 = indexBase[ tridx3 ];
+						total_area += TriangleArea( vertexBase[ tridx1 ], vertexBase[ tridx2 ], vertexBase[ tridx3 ] );
 					}
 				}
 				else
@@ -247,10 +252,10 @@ void ltr_Scene::DoWork()
 					for( u32 tri = 0; tri < mp.m_indexCount; tri += 3 )
 					{
 						u32 tridx1 = tri, tridx2 = tri + 1, tridx3 = tri + 2;
-						tridx1 = mesh->m_indices[ tridx1 ];
-						tridx2 = mesh->m_indices[ tridx2 ];
-						tridx3 = mesh->m_indices[ tridx3 ];
-						total_area += TriangleArea( mi->m_vpos[ tridx1 ], mi->m_vpos[ tridx2 ], mi->m_vpos[ tridx3 ] );
+						tridx1 = indexBase[ tridx1 ];
+						tridx2 = indexBase[ tridx2 ];
+						tridx3 = indexBase[ tridx3 ];
+						total_area += TriangleArea( vertexBase[ tridx1 ], vertexBase[ tridx2 ], vertexBase[ tridx3 ] );
 					}
 				}
 			}
@@ -275,20 +280,24 @@ void ltr_Scene::DoWork()
 	case LTR_WT_COLINFO:
 		{
 			ltr_MeshInstance* mi = m_meshInstances[ m_workPart ];
+			if( !mi->m_shadow )
+				break;
 			ltr_Mesh* mesh = mi->mesh;
 			
 			for( u32 part = 0; part < mesh->m_parts.size(); ++part )
 			{
 				const ltr_MeshPart& mp = mesh->m_parts[ part ];
+				const Vec3* vertexBase = &mi->m_vpos[ mp.m_vertexOffset ];
+				const u32* indexBase = &mesh->m_indices[ mp.m_indexOffset ];
 				if( mp.m_tristrip )
 				{
 					for( u32 tri = 2; tri < mp.m_indexCount; ++tri )
 					{
 						u32 tridx1 = tri, tridx2 = tri + 1 + tri % 2, tridx3 = tri + 2 - tri % 2;
-						tridx1 = mesh->m_indices[ tridx1 ];
-						tridx2 = mesh->m_indices[ tridx2 ];
-						tridx3 = mesh->m_indices[ tridx3 ];
-						BSPTriangle T = { mi->m_vpos[ tridx1 ], mi->m_vpos[ tridx2 ], mi->m_vpos[ tridx3 ] };
+						tridx1 = indexBase[ tridx1 ];
+						tridx2 = indexBase[ tridx2 ];
+						tridx3 = indexBase[ tridx3 ];
+						BSPTriangle T = { vertexBase[ tridx1 ], vertexBase[ tridx2 ], vertexBase[ tridx3 ] };
 						m_triTree.AddTriangle( &T );
 					}
 				}
@@ -297,10 +306,10 @@ void ltr_Scene::DoWork()
 					for( u32 tri = 0; tri < mp.m_indexCount; tri += 3 )
 					{
 						u32 tridx1 = tri, tridx2 = tri + 1, tridx3 = tri + 2;
-						tridx1 = mesh->m_indices[ tridx1 ];
-						tridx2 = mesh->m_indices[ tridx2 ];
-						tridx3 = mesh->m_indices[ tridx3 ];
-						BSPTriangle T = { mi->m_vpos[ tridx1 ], mi->m_vpos[ tridx2 ], mi->m_vpos[ tridx3 ] };
+						tridx1 = indexBase[ tridx1 ];
+						tridx2 = indexBase[ tridx2 ];
+						tridx3 = indexBase[ tridx3 ];
+						BSPTriangle T = { vertexBase[ tridx1 ], vertexBase[ tridx2 ], vertexBase[ tridx3 ] };
 						m_triTree.AddTriangle( &T );
 					}
 				}
@@ -351,6 +360,8 @@ void ltr_Scene::DoWork()
 				}
 			}
 			mi->m_lightmap.resize( sample_count );
+			for( size_t i = 0; i < mi->m_lightmap.size(); ++i )
+				mi->m_lightmap[ i ] = Vec3::CreateFromPtr( config.ambient_color );
 		}
 		break;
 		
@@ -445,7 +456,7 @@ void ltr_Scene::DoWork()
 	case LTR_WT_AORENDER:
 		{
 			ltr_MeshInstance* mi = m_meshInstances[ m_workPart ];
-			float ao_divergence = config.ao_divergence * 0.5f + 0.5f;
+		//	float ao_divergence = config.ao_divergence * 0.5f + 0.5f;
 			float ao_distance = config.ao_distance,
 				ao_falloff = config.ao_falloff,
 				ao_multiplier = config.ao_multiplier,
@@ -462,9 +473,10 @@ void ltr_Scene::DoWork()
 				Vec3 ray_origin = SP + SN * ( SMALL_FLOAT * 2 );
 				
 				float ao_factor = 0;
+				float randoff = randf();
 				for( int s = 0; s < num_samples; ++s )
 				{
-					Vec3 ray_dir = Vec3::CreateRandomVectorDirDvg( SN, ao_divergence ) * ao_distance;
+					Vec3 ray_dir = Vec3::CreateSpiralDirVector( SN, randoff, s, num_samples ) * ao_distance;
 					float hit = VisibilityTest( ray_origin, ray_origin + ray_dir );
 					if( hit < 1.0f )
 						ao_factor += 1.0f - hit;
@@ -620,8 +632,8 @@ void ltr_GetConfig( ltr_Config* cfg, ltr_Scene* opt_scene )
 	LTR_VEC3_SET( cfg->ambient_color, 0, 0, 0 );
 	
 	cfg->ao_distance = 0;
-	cfg->ao_multiplier = 1;
-	cfg->ao_falloff = 2;
+	cfg->ao_multiplier = 1.2f;
+	cfg->ao_falloff = 1;
 	cfg->ao_effect = 0;
 	cfg->ao_divergence = 0;
 	LTR_VEC3_SET( cfg->ao_color_rgb, 0, 0, 0 );
@@ -691,6 +703,7 @@ LTRBOOL ltr_MeshAddInstance( ltr_Mesh* mesh, ltr_MeshInstanceInfo* mii )
 	ltr_MeshInstance* mi = new ltr_MeshInstance;
 	mi->mesh = mesh;
 	mi->m_importance = mii->importance;
+	mi->m_shadow = !!mii->shadow;
 	if( mii->ident )
 		mi->m_ident.assign( mii->ident, mii->ident_size );
 	memcpy( mi->matrix.a, mii->matrix, sizeof(Mat4) );

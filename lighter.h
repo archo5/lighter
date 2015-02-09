@@ -75,6 +75,7 @@ typedef struct ltr_MeshInstanceInfo
 {
 	ltr_MAT4 matrix;
 	float importance;
+	int shadow;
 	const char* ident;
 	size_t ident_size;
 }

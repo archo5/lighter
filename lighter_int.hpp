@@ -128,6 +128,7 @@ struct Vec3
 		return v;
 	}
 	static FORCEINLINE Vec3 CreateRandomVectorDirDvg( const Vec3& dir, float dvg );
+	static FORCEINLINE Vec3 CreateSpiralDirVector( const Vec3& dir, float randoff, int i, int sample_count );
 	
 	FORCEINLINE Vec3 operator + () const { return *this; }
 	FORCEINLINE Vec3 operator - () const { Vec3 v = { -x, -y, -z }; return v; }
@@ -205,6 +206,23 @@ Vec3 Vec3::CreateRandomVectorDirDvg( const Vec3& dir, float dvg )
 	Vec3 up = Vec3Cross( dir, diffvec ).Normalized();
 	Vec3 rt = Vec3Cross( dir, up );
 	return ac * bs * rt + as * bs * up + bc * dir;
+}
+
+#define DEG2RAD( x ) ((x)/180.0f*M_PI)
+Vec3 Vec3::CreateSpiralDirVector( const Vec3& dir, float randoff, int i, int sample_count )
+{
+	float q = ( i + 0.5f ) / sample_count;
+	float cos_side = sqrt( q );
+	float sin_side = sin( acos( cos_side ) );
+	float angle = ( i + randoff ) * DEG2RAD( 137.508f );
+	float cos_around = cos( angle );
+	float sin_around = sin( angle );
+	
+	Vec3 diffvec = { dir.y, -dir.z, dir.x };
+	Vec3 up = Vec3Cross( dir, diffvec ).Normalized();
+	Vec3 rt = Vec3Cross( dir, up );
+	
+	return cos_around * sin_side * rt + sin_around * sin_side * up + cos_side * dir;
 }
 
 
