@@ -428,7 +428,7 @@ void BSPNode::AddTriangleSplit( BSPTriangle* tri, int depth )
 	back_node->AddTriangle( tri, depth );
 }
 
-float BSPNode::IntersectRay( const Vec3& from, const Vec3& to )
+float BSPNode::IntersectRay( const Vec3& from, const Vec3& to, Vec3* outnormal )
 {
 	if( front_node ) // node split
 	{
@@ -436,30 +436,38 @@ float BSPNode::IntersectRay( const Vec3& from, const Vec3& to )
 		float d_to = Vec3Dot( to, N ) - D;
 		if( d_from < 0 )
 		{
-			float hit = back_node->IntersectRay( from, to );
+			float hit = back_node->IntersectRay( from, to, outnormal );
 			if( hit < 1.0f )
 				return hit;
-			return d_to > 0 ? front_node->IntersectRay( from, to ) : BSP_NO_HIT;
+			return d_to > 0 ? front_node->IntersectRay( from, to, outnormal ) : BSP_NO_HIT;
 		}
 		else
 		{
-			float hit = front_node->IntersectRay( from, to );
+			float hit = front_node->IntersectRay( from, to, outnormal );
 			if( hit < 1.0f )
 				return hit;
-			return d_to < 0 ? back_node->IntersectRay( from, to ) : BSP_NO_HIT;
+			return d_to < 0 ? back_node->IntersectRay( from, to, outnormal ) : BSP_NO_HIT;
 		}
 	}
 	else
 	{
 		float closest_hit = BSP_NO_HIT;
+		BSPTriangle* closest_tri = NULL;
 		for( size_t i = 0; i < triangles.size(); ++i )
 		{
 			BSPTriangle& T = triangles[i];
 			float hit = IntersectLineSegmentTriangle( from, to, T.P1, T.P2, T.P3 );
-			if( hit < closest_hit )//{
+			if( hit < closest_hit )
+			{
 				closest_hit = hit;
+				closest_tri = &T;
 				// printf( "HIT %f from=%.2f %.2f %.2f to=%.2f %.2f %.2f p1=%.4f %.4f %.4f p2=%.4f %.4f %.4f p3=%.4f %.4f %.4f",
-				// hit,from.x,from.y,from.z,to.x,to.y,to.z,T.P1.x,T.P1.y,T.P1.z,T.P2.x,T.P2.y,T.P2.z,T.P3.x,T.P3.y,T.P3.z);}
+				// hit,from.x,from.y,from.z,to.x,to.y,to.z,T.P1.x,T.P1.y,T.P1.z,T.P2.x,T.P2.y,T.P2.z,T.P3.x,T.P3.y,T.P3.z);
+			}
+		}
+		if( outnormal && closest_tri )
+		{
+			*outnormal = Vec3Cross( closest_tri->P3 - closest_tri->P1, closest_tri->P2 - closest_tri->P1 ).Normalized();
 		}
 		return closest_hit;
 	}

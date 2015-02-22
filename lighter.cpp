@@ -60,9 +60,10 @@ struct ltr_MeshInstance
 	std::string m_ident;
 	float m_importance;
 	Mat4 matrix;
-	bool m_shadow;
 	u32 lm_width;
 	u32 lm_height;
+	bool m_shadow;
+	bool m_samplecont;
 	
 	// tmp
 	Vec3Vector m_vpos;
@@ -95,12 +96,24 @@ typedef struct ltr_Light
 ltr_Light;
 typedef std::vector< ltr_Light > LightVector;
 
+typedef std::vector< ltr_SampleInfo > SampleVector;
+
 struct ltr_Scene
 {
-	ltr_Scene() : m_workType( LTR_WT_PREXFORM ), m_workPart( 0 ){ ltr_GetConfig( &config, NULL ); }
+	ltr_Scene() : m_workType( LTR_WT_PREXFORM ), m_workPart( 0 )
+	{
+		ltr_GetConfig( &config, NULL );
+		
+		m_sampleMI.m_samplecont = true;
+		m_sampleMI.mesh = NULL;
+		m_sampleMI.m_importance = 0;
+		m_sampleMI.lm_width = 0;
+		m_sampleMI.lm_height = 0;
+		m_meshInstances.push_back( &m_sampleMI );
+	}
 	~ltr_Scene()
 	{
-		for( size_t i = 0; i < m_meshInstances.size(); ++i )
+		for( size_t i = 1; i < m_meshInstances.size(); ++i )
 			delete m_meshInstances[i];
 		for( size_t i = 0; i < m_meshes.size(); ++i )
 			delete m_meshes[i];
@@ -112,13 +125,15 @@ struct ltr_Scene
 	LTRCODE Advance();
 	void RasterizeInstance( ltr_MeshInstance* mi, float margin );
 	float VisibilityTest( const Vec3& A, ltr_Light* light );
-	float VisibilityTest( const Vec3& A, const Vec3& B );
+	float VisibilityTest( const Vec3& A, const Vec3& B, Vec3* outnormal = NULL );
 	
 	ltr_Config config;
 	
 	MeshPtrVector m_meshes;
 	MeshInstPtrVector m_meshInstances;
 	LightVector m_lights;
+	ltr_MeshInstance m_sampleMI;
+	SampleVector m_samples;
 	
 	Vec3Vector m_tmpRender1;
 	Vec3Vector m_tmpRender2;
@@ -197,17 +212,17 @@ float ltr_Scene::VisibilityTest( const Vec3& A, ltr_Light* light )
 		
 		float hit = m_triTree.IntersectRay( mB, mA );
 		if( hit < 1.0f )
-			total += TMIN( ( 1 - hit ) * ( B - A ).Length(), 1.0f );
+			total += TMIN( ( 1 - hit ) * ( B - A ).Length() * 1000.0f, 1.0f );
 	}
 	return 1.0f - total / (float) light->shadow_sample_count;
 }
 
-float ltr_Scene::VisibilityTest( const Vec3& A, const Vec3& B )
+float ltr_Scene::VisibilityTest( const Vec3& A, const Vec3& B, Vec3* outnormal )
 {
 	Vec3 diffnorm = ( B - A ).Normalized();
 	Vec3 mA = A + diffnorm * SMALL_FLOAT;
 	Vec3 mB = B - diffnorm * SMALL_FLOAT;
-	return m_triTree.IntersectRay( mA, mB );
+	return m_triTree.IntersectRay( mA, mB, outnormal );
 }
 
 void ltr_Scene::DoWork()
@@ -220,6 +235,8 @@ void ltr_Scene::DoWork()
 	case LTR_WT_PREXFORM:
 		{
 			ltr_MeshInstance* mi = m_meshInstances[ m_workPart ];
+			if( mi->m_samplecont )
+				break;
 			ltr_Mesh* mesh = mi->mesh;
 			
 			mi->m_vpos.resize( mesh->m_vpos.size() );
@@ -280,6 +297,8 @@ void ltr_Scene::DoWork()
 	case LTR_WT_COLINFO:
 		{
 			ltr_MeshInstance* mi = m_meshInstances[ m_workPart ];
+			if( mi->m_samplecont )
+				break;
 			if( !mi->m_shadow )
 				break;
 			ltr_Mesh* mesh = mi->mesh;
@@ -319,7 +338,10 @@ void ltr_Scene::DoWork()
 		
 	case LTR_WT_SAMPLES:
 		{
+			float corr_min_dot = cosf( config.max_correct_angle / 180.0f * M_PI );
 			ltr_MeshInstance* mi = m_meshInstances[ m_workPart ];
+			if( mi->m_samplecont )
+				break;
 			
 			if( m_tmpRender1.size() < mi->lm_width * mi->lm_height )
 				m_tmpRender1.resize( mi->lm_width * mi->lm_height );
@@ -354,7 +376,24 @@ void ltr_Scene::DoWork()
 				Vec3& N = m_tmpRender2[ i ];
 				if( !N.IsZero() )
 				{
-					mi->m_samples_pos.push_back( m_tmpRender1[ i ] );
+					Vec3 P = m_tmpRender1[ i ];
+					if( config.max_correct_dist )
+					{
+						float md = config.max_correct_dist;
+						Vec3 PEnd = P + N * md;
+						while( md > SMALL_FLOAT )
+						{
+							Vec3 hitnrm = {0,0,0};
+							float q = VisibilityTest( P, PEnd, &hitnrm );
+							if( Vec3Dot( hitnrm, N ) < corr_min_dot )
+								break;
+							if( q == 0 )
+								q = SMALL_FLOAT;
+							P = P * ( 1.0f - q ) + PEnd * q;
+							md *= ( 1.0f - q );
+						}
+					}
+					mi->m_samples_pos.push_back( P );
 					mi->m_samples_nrm.push_back( N );
 					mi->m_samples_loc.push_back( i );
 				}
@@ -501,6 +540,16 @@ void ltr_Scene::DoWork()
 	case LTR_WT_FINALIZE:
 		{
 			ltr_MeshInstance* mi = m_meshInstances[ m_workPart ];
+			if( mi->m_samplecont )
+			{
+				for( size_t i = 0; i < mi->m_lightmap.size(); ++i )
+				{
+					m_samples[ i ].out_color[0] = mi->m_lightmap[ i ].x;
+					m_samples[ i ].out_color[1] = mi->m_lightmap[ i ].y;
+					m_samples[ i ].out_color[2] = mi->m_lightmap[ i ].z;
+				}
+				break;
+			}
 			ltr_Mesh* mesh = mi->mesh;
 			
 			float* image_rgb = new float[ mi->lm_width * mi->lm_height * 3 ];
@@ -627,6 +676,8 @@ void ltr_GetConfig( ltr_Config* cfg, ltr_Scene* opt_scene )
 	cfg->default_width = 64;
 	cfg->default_height = 64;
 	cfg->global_size_factor = 4;
+	cfg->max_correct_dist = 0.1f;
+	cfg->max_correct_angle = 60;
 	
 	LTR_VEC3_SET( cfg->clear_color, 0, 0, 0 );
 	LTR_VEC3_SET( cfg->ambient_color, 0, 0, 0 );
@@ -704,6 +755,7 @@ LTRBOOL ltr_MeshAddInstance( ltr_Mesh* mesh, ltr_MeshInstanceInfo* mii )
 	mi->mesh = mesh;
 	mi->m_importance = mii->importance;
 	mi->m_shadow = !!mii->shadow;
+	mi->m_samplecont = false;
 	if( mii->ident )
 		mi->m_ident.assign( mii->ident, mii->ident_size );
 	memcpy( mi->matrix.a, mii->matrix, sizeof(Mat4) );
@@ -733,10 +785,24 @@ void ltr_LightAdd( ltr_Scene* scene, ltr_LightInfo* li )
 	scene->m_lights.push_back( L );
 }
 
+void ltr_SampleAdd( ltr_Scene* scene, ltr_SampleInfo* si )
+{
+	ltr_SampleInfo S = *si;
+	S.out_color[0] = 0;
+	S.out_color[1] = 0;
+	S.out_color[2] = 0;
+	scene->m_sampleMI.m_samples_pos.push_back( Vec3::CreateFromPtr( S.position ) );
+	scene->m_sampleMI.m_samples_nrm.push_back( Vec3::CreateFromPtr( S.normal ) );
+	scene->m_sampleMI.m_lightmap.push_back( Vec3::Create(0,0,0) );
+	scene->m_samples.push_back( S );
+}
+
 
 void ltr_GetWorkOutputInfo( ltr_Scene* scene, ltr_WorkOutputInfo* woutinfo )
 {
 	woutinfo->lightmap_count = scene->m_workOutput.size();
+	woutinfo->sample_count = scene->m_samples.size();
+	woutinfo->samples = &scene->m_samples[0];
 }
 
 LTRBOOL ltr_GetWorkOutput( ltr_Scene* scene, u32 which, ltr_WorkOutput* wout )

@@ -346,7 +346,7 @@ struct BSPNode
 	
 	void AddTriangle( BSPTriangle* tri, int depth );
 	void AddTriangleSplit( BSPTriangle* tri, int depth );
-	float IntersectRay( const Vec3& from, const Vec3& to );
+	float IntersectRay( const Vec3& from, const Vec3& to, Vec3* outnormal );
 	bool PickSplitPlane();
 	
 	void Dump( FILE* f, int lev = 0, const char* pfx = "" )
@@ -381,7 +381,7 @@ struct BSPTree
 	~BSPTree(){ delete root; }
 	
 	FORCEINLINE void AddTriangle( BSPTriangle* tri ){ root->AddTriangle( tri, 0 ); }
-	FORCEINLINE float IntersectRay( const Vec3& from, const Vec3& to ){ return root->IntersectRay( from, to ); }
+	FORCEINLINE float IntersectRay( const Vec3& from, const Vec3& to, Vec3* outnormal = NULL ){ return root->IntersectRay( from, to, outnormal ); }
 	
 	BSPNode* root;
 };

@@ -98,6 +98,15 @@ typedef struct ltr_LightInfo
 }
 ltr_LightInfo;
 
+typedef struct ltr_SampleInfo
+{
+	u32 id;
+	ltr_VEC3 position;
+	ltr_VEC3 normal;
+	ltr_VEC3 out_color;
+}
+ltr_SampleInfo;
+
 typedef struct ltr_Config
 {
 	// callbacks
@@ -119,6 +128,8 @@ typedef struct ltr_Config
 	u32 default_width;
 	u32 default_height;
 	float global_size_factor;
+	float max_correct_dist;
+	float max_correct_angle;
 	// lightmap generation
 	ltr_VEC3 clear_color; /* the color used outside triangles */
 	ltr_VEC3 ambient_color; /* the base color used inside triangles */
@@ -155,6 +166,8 @@ LTRAPI LTRBOOL ltr_DefaultSizeFunc
 typedef struct ltr_WorkOutputInfo
 {
 	u32 lightmap_count;
+	u32 sample_count;
+	ltr_SampleInfo* samples;
 }
 ltr_WorkOutputInfo;
 
@@ -187,6 +200,7 @@ LTRAPI ltr_Mesh* ltr_CreateMesh( ltr_Scene* scene, const char* ident, size_t ide
 LTRAPI LTRBOOL ltr_MeshAddPart( ltr_Mesh* mesh, ltr_MeshPartInfo* mpinfo );
 LTRAPI LTRBOOL ltr_MeshAddInstance( ltr_Mesh* mesh, ltr_MeshInstanceInfo* mii );
 LTRAPI void ltr_LightAdd( ltr_Scene* scene, ltr_LightInfo* li );
+LTRAPI void ltr_SampleAdd( ltr_Scene* scene, ltr_SampleInfo* si );
 
 // - data output
 LTRAPI void ltr_GetWorkOutputInfo( ltr_Scene* scene, ltr_WorkOutputInfo* woutinfo );
