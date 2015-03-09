@@ -379,15 +379,16 @@ void ltr_Scene::DoWork()
 					Vec3 P = m_tmpRender1[ i ];
 					if( config.max_correct_dist )
 					{
+						int itsleft = 100;
 						float md = config.max_correct_dist;
 						Vec3 PEnd = P + N * md;
-						while( md > SMALL_FLOAT )
+						while( md > SMALL_FLOAT && itsleft --> 0 )
 						{
 							Vec3 hitnrm = {0,0,0};
 							float q = VisibilityTest( P, PEnd, &hitnrm );
 							if( Vec3Dot( hitnrm, N ) < corr_min_dot )
 								break;
-							if( q == 0 )
+							if( q < SMALL_FLOAT )
 								q = SMALL_FLOAT;
 							P = P * ( 1.0f - q ) + PEnd * q;
 							md *= ( 1.0f - q );
