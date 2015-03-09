@@ -19,7 +19,7 @@ LTRBOOL ltr_DefaultSizeFunc
 	float size = config->global_size_factor * sqrtf( computed_surface_area ) * inst_importance;
 	if( size < 1 )
 		size = 1;
-	u32 ui_size = ltr_NextPowerOfTwo( size );
+	u32 ui_size = ltr_NextPowerOfTwo( (u32) size );
 	if( ui_size > config->max_lightmap_size )
 		return 0;
 	out_size[0] = ui_size;
@@ -78,7 +78,7 @@ struct ltr_MeshInstance
 };
 typedef std::vector< ltr_MeshInstance* > MeshInstPtrVector;
 
-typedef struct ltr_Light
+struct ltr_Light
 {
 	u32 type;
 	Vec3 position;
@@ -92,11 +92,33 @@ typedef struct ltr_Light
 	float spot_angle_out;
 	float spot_angle_in;
 	float spot_curve;
-}
-ltr_Light;
+};
 typedef std::vector< ltr_Light > LightVector;
 
 typedef std::vector< ltr_SampleInfo > SampleVector;
+
+struct ltr_RadSampleGeom
+{
+	Vec3 pos;
+	Vec3 normal;
+};
+typedef std::vector< ltr_RadSampleGeom > RadSampleGeomVector;
+
+struct ltr_RadSampleColors
+{
+	Vec3 diffuseColor;
+	Vec3 totalLight;
+	Vec3 outputEnergy;
+	Vec3 inputEnergy;
+};
+typedef std::vector< ltr_RadSampleColors > RadSampleColorsVector;
+
+struct ltr_RadLink
+{
+	uint32_t other;
+	float factor;
+};
+typedef std::vector< ltr_RadLink > RadLinkVector;
 
 struct ltr_Scene
 {
@@ -134,6 +156,11 @@ struct ltr_Scene
 	LightVector m_lights;
 	ltr_MeshInstance m_sampleMI;
 	SampleVector m_samples;
+	
+	RadSampleGeomVector m_radSampleGeoms;
+	RadSampleColorsVector m_radSampleColors;
+	RadLinkVector m_radLinks;
+	U32Vector m_radLinkMap;
 	
 	Vec3Vector m_tmpRender1;
 	Vec3Vector m_tmpRender2;
@@ -288,7 +315,7 @@ void ltr_Scene::DoWork()
 			mi->lm_height = out_size[1];
 			
 			// transform texcoords
-			Vec2 lsize = Vec2::Create( mi->lm_width, mi->lm_height );
+			Vec2 lsize = Vec2::Create( (float) mi->lm_width, (float) mi->lm_height );
 			for( size_t i = 0; i < mi->m_ltex.size(); ++i )
 				mi->m_ltex[ i ] = mesh->m_vtex2[ i ] * lsize - Vec2::Create(0.5f);
 		}
@@ -338,7 +365,7 @@ void ltr_Scene::DoWork()
 		
 	case LTR_WT_SAMPLES:
 		{
-			float corr_min_dot = cosf( config.max_correct_angle / 180.0f * M_PI );
+			float corr_min_dot = cosf( config.max_correct_angle / 180.0f * (float) M_PI );
 			ltr_MeshInstance* mi = m_meshInstances[ m_workPart ];
 			if( mi->m_samplecont )
 				break;
@@ -433,7 +460,7 @@ void ltr_Scene::DoWork()
 			}
 			if( light.type == LTR_LT_SPOT )
 			{
-				float angle_out_rad = light.spot_angle_out / 180.0f * M_PI, angle_in_rad = light.spot_angle_in / 180.0f * M_PI;
+				float angle_out_rad = light.spot_angle_out / 180.0f * (float) M_PI, angle_in_rad = light.spot_angle_in / 180.0f * (float) M_PI;
 				if( angle_in_rad == angle_out_rad )
 					angle_in_rad -= SMALL_FLOAT;
 				float angle_diff = angle_in_rad - angle_out_rad;
@@ -488,6 +515,103 @@ void ltr_Scene::DoWork()
 				//	//		exit(0);
 				//	}
 					mi->m_lightmap[ i ] += light.color_rgb * ( f_ndotl * f_vistest );
+				}
+			}
+		}
+		break;
+		
+	case LTR_WT_RDGENLNK:
+		for( size_t mi_id = 0; mi_id < m_meshInstances.size(); ++mi_id )
+		{
+			ltr_MeshInstance* mi = m_meshInstances[ mi_id ];
+			for( size_t i = 0; i < mi->m_lightmap.size(); ++i )
+			{
+				ltr_RadSampleGeom RSG = { mi->m_samples_pos[ i ], mi->m_samples_nrm[ i ].Normalized() };
+				m_radSampleGeoms.push_back( RSG );
+				
+				ltr_RadSampleColors RSC = { Vec3::Create(1), mi->m_lightmap[ i ], mi->m_lightmap[ i ], Vec3::Create(0) };
+				m_radSampleColors.push_back( RSC );
+			}
+		}
+		printf( "SAMPLE COUNT: %d\n", (int) m_radSampleGeoms.size() );
+		for( size_t i = 0; i < m_radSampleGeoms.size(); ++i )
+		{
+			m_radLinkMap.push_back( m_radLinks.size() ); // offset
+			m_radLinkMap.push_back( 0 ); // count
+			
+			const Vec3& A_SP = m_radSampleGeoms[ i ].pos;
+			const Vec3& A_SN = m_radSampleGeoms[ i ].normal;
+			for( size_t j = i + 1; j < m_radSampleGeoms.size(); ++j )
+			{
+				const Vec3& B_SP = m_radSampleGeoms[ j ].pos;
+				const Vec3& B_SN = m_radSampleGeoms[ j ].normal;
+				
+				Vec3 posdiff = B_SP - A_SP;
+				float dotA = Vec3Dot( A_SN, posdiff );
+				float dotB = Vec3Dot( B_SN, -posdiff );
+				if( dotA <= SMALL_FLOAT || dotB <= SMALL_FLOAT )
+					continue;
+				
+				float lensq = posdiff.LengthSq();
+				float len = sqrt( lensq );
+				dotA /= len;
+				dotB /= len;
+				
+				float factor = dotA * dotB / ( (float) M_PI * lensq );
+				if( factor < SMALL_FLOAT )
+					continue;
+				
+				if( VisibilityTest( A_SP, B_SP ) < 1.0f )
+					continue;
+				
+				// add sample
+				ltr_RadLink RL = { (uint32_t) j, factor };
+				m_radLinks.push_back( RL );
+				m_radLinkMap.back()++;
+			}
+		}
+		break;
+		
+	case LTR_WT_RDBOUNCE:
+		for( size_t i = 0; i < m_radLinkMap.size() / 2; ++i )
+		{
+			size_t sidbegin = m_radLinkMap[ i*2+0 ];
+			size_t sidend = sidbegin + m_radLinkMap[ i*2+1 ];
+			for( size_t sid = sidbegin; sid < sidend; ++sid )
+			{
+				size_t j = m_radLinks[ sid ].other;
+				float f = m_radLinks[ sid ].factor;
+				
+				ltr_RadSampleColors& A_RSC = m_radSampleColors[ i ];
+				ltr_RadSampleColors& B_RSC = m_radSampleColors[ j ];
+				
+				Vec3 A_out = ( A_RSC.outputEnergy * A_RSC.diffuseColor ) * f;
+				Vec3 B_out = ( B_RSC.outputEnergy * B_RSC.diffuseColor ) * f;
+				
+				A_RSC.totalLight += B_out;
+				B_RSC.totalLight += A_out;
+				
+				A_RSC.inputEnergy += B_out;
+				B_RSC.inputEnergy += A_out;
+			}
+		}
+		for( size_t i = 0; i < m_radSampleColors.size(); ++i )
+		{
+			ltr_RadSampleColors& RSC = m_radSampleColors[ i ];
+			RSC.outputEnergy = RSC.inputEnergy;
+			RSC.inputEnergy = Vec3::Create(0);
+		}
+		break;
+		
+	case LTR_WT_RDCOMMIT:
+		{
+			size_t sp = 0;
+			for( size_t mi_id = 0; mi_id < m_meshInstances.size(); ++mi_id )
+			{
+				ltr_MeshInstance* mi = m_meshInstances[ mi_id ];
+				for( size_t i = 0; i < mi->m_lightmap.size(); ++i )
+				{
+					mi->m_lightmap[ i ] = m_radSampleColors[ sp++ ].totalLight;
 				}
 			}
 		}
@@ -566,7 +690,7 @@ void ltr_Scene::DoWork()
 			
 			if( config.blur_size )
 			{
-				int blur_ext = ceil( config.blur_size );
+				int blur_ext = (int) ceil( config.blur_size );
 				int blurbuf_size = ( TMAX( mi->lm_width, mi->lm_height ) + blur_ext * 2 ) * 3;
 				int kernel_size = blur_ext * 2 + 1;
 				float* image_tmp_rgb = new float[ mi->lm_width * mi->lm_height * 3 + blurbuf_size + kernel_size ];
@@ -603,6 +727,10 @@ LTRCODE ltr_Scene::Advance()
 	u32 count = m_meshInstances.size();
 	if( m_workType == LTR_WT_LMRENDER )
 		count *= m_lights.size();
+	if( m_workType == LTR_WT_RDGENLNK || m_workType == LTR_WT_RDCOMMIT )
+		count = 1;
+	if( m_workType == LTR_WT_RDBOUNCE )
+		count = config.bounce_count;
 	
 	m_workPart++;
 	if( m_workPart >= count )
@@ -613,8 +741,14 @@ LTRCODE ltr_Scene::Advance()
 		m_workType++;
 		m_workPart = 0;
 		
-		if( m_workType == LTR_WT_AORENDER && config.ao_distance == 0 )
+		if( ( config.bounce_count == 0 &&
+			( m_workType == LTR_WT_RDGENLNK
+			|| m_workType == LTR_WT_RDBOUNCE
+			|| m_workType == LTR_WT_RDCOMMIT ) ) ||
+			( m_workType == LTR_WT_AORENDER && config.ao_distance == 0 ) )
+		{
 			m_workType++;
+		}
 	}
 	
 	return LTRC_SUCCESS;
@@ -643,6 +777,18 @@ LTRCODE ltr_DoWork( ltr_Scene* scene, ltr_WorkInfo* info )
 	case LTR_WT_LMRENDER:
 		info->stage = "rendering lightmaps";
 		info->item_count = scene->m_meshInstances.size() * scene->m_lights.size();
+		break;
+	case LTR_WT_RDGENLNK:
+		info->stage = "calculating radiosity";
+		info->item_count = 1;
+		break;
+	case LTR_WT_RDBOUNCE:
+		info->stage = "bouncing light";
+		info->item_count = scene->config.bounce_count;
+		break;
+	case LTR_WT_RDCOMMIT:
+		info->stage = "committing radiosity";
+		info->item_count = 1;
 		break;
 	case LTR_WT_AORENDER:
 		info->stage = "rendering ambient occlusion";
@@ -682,6 +828,8 @@ void ltr_GetConfig( ltr_Config* cfg, ltr_Scene* opt_scene )
 	
 	LTR_VEC3_SET( cfg->clear_color, 0, 0, 0 );
 	LTR_VEC3_SET( cfg->ambient_color, 0, 0, 0 );
+	
+	cfg->bounce_count = 0;
 	
 	cfg->ao_distance = 0;
 	cfg->ao_multiplier = 1.2f;

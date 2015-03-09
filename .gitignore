@@ -19,3 +19,7 @@ ipch
 .DS_Store
 xcuserdata
 !*.data
+/msvc2010/Debug/*
+/msvc2010/Release/*
+/msvc2010/lighter_test/Debug/*
+/msvc2010/lighter_test/Release/*

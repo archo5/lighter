@@ -2,6 +2,7 @@
 
 #pragma once
 
+#define _USE_MATH_DEFINES
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
@@ -32,8 +33,11 @@
 #define LTR_WT_COLINFO  1 // generate collision info (* mesh)
 #define LTR_WT_SAMPLES  2 // gather sampled information to compact position/normal/index arrays, allocate color arrays (* mesh)
 #define LTR_WT_LMRENDER 3 // generate colors for samples by rendering lights to lightmaps (* mesh * light)
-#define LTR_WT_AORENDER 4 // generate ambient occlusion for samples (* mesh)
-#define LTR_WT_FINALIZE 5 // push sample data back to lightmaps (* mesh)
+#define LTR_WT_RDGENLNK 4 // calculate sample links
+#define LTR_WT_RDBOUNCE 5 // calculate a bounce between samples
+#define LTR_WT_RDCOMMIT 6 // commit radiosity calculations
+#define LTR_WT_AORENDER 7 // generate ambient occlusion for samples (* mesh)
+#define LTR_WT_FINALIZE 8 // push sample data back to lightmaps (* mesh)
 
 
 FORCEINLINE float randf(){ return (float) rand() / (float) RAND_MAX; }
@@ -119,8 +123,8 @@ struct Vec3
 	static FORCEINLINE Vec3 CreateFromPtr( const float* x ){ Vec3 v = { x[0], x[1], x[2] }; return v; }
 	static FORCEINLINE Vec3 CreateRandomVector( float maxdist )
 	{
-		float a = randf() * M_PI * 2;
-		float b = randf() * M_PI;
+		float a = randf() * (float)M_PI * 2;
+		float b = randf() * (float)M_PI;
 		float d = randf() * maxdist;
 		float ac = cos( a ), as = sin( a );
 		float bc = cos( b ), bs = sin( b );
@@ -198,8 +202,8 @@ FORCEINLINE Vec3 Vec3Cross( const Vec3& v1, const Vec3& v2 )
 
 Vec3 Vec3::CreateRandomVectorDirDvg( const Vec3& dir, float dvg )
 {
-	float a = randf() * M_PI * 2;
-	float b = randf() * M_PI * dvg;
+	float a = randf() * (float)M_PI * 2;
+	float b = randf() * (float)M_PI * dvg;
 	float ac = cos( a ), as = sin( a );
 	float bc = cos( b ), bs = sin( b );
 	Vec3 diffvec = { dir.y, -dir.z, dir.x };
@@ -208,7 +212,7 @@ Vec3 Vec3::CreateRandomVectorDirDvg( const Vec3& dir, float dvg )
 	return ac * bs * rt + as * bs * up + bc * dir;
 }
 
-#define DEG2RAD( x ) ((x)/180.0f*M_PI)
+#define DEG2RAD( x ) ((x)/180.0f*(float)M_PI)
 Vec3 Vec3::CreateSpiralDirVector( const Vec3& dir, float randoff, int i, int sample_count )
 {
 	float q = ( i + 0.5f ) / sample_count;

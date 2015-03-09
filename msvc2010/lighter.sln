@@ -1,0 +1,29 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual C++ Express 2010
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "lighter", "lighter.vcxproj", "{349BFF68-20BC-4BA3-BEA1-2B66AC236C5D}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "lighter_test", "lighter_test.vcxproj", "{5159759C-57E9-462C-B901-7AEF8A2B2ADC}"
+	ProjectSection(ProjectDependencies) = postProject
+		{349BFF68-20BC-4BA3-BEA1-2B66AC236C5D} = {349BFF68-20BC-4BA3-BEA1-2B66AC236C5D}
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{349BFF68-20BC-4BA3-BEA1-2B66AC236C5D}.Debug|Win32.ActiveCfg = Debug|Win32
+		{349BFF68-20BC-4BA3-BEA1-2B66AC236C5D}.Debug|Win32.Build.0 = Debug|Win32
+		{349BFF68-20BC-4BA3-BEA1-2B66AC236C5D}.Release|Win32.ActiveCfg = Release|Win32
+		{349BFF68-20BC-4BA3-BEA1-2B66AC236C5D}.Release|Win32.Build.0 = Release|Win32
+		{5159759C-57E9-462C-B901-7AEF8A2B2ADC}.Debug|Win32.ActiveCfg = Debug|Win32
+		{5159759C-57E9-462C-B901-7AEF8A2B2ADC}.Debug|Win32.Build.0 = Debug|Win32
+		{5159759C-57E9-462C-B901-7AEF8A2B2ADC}.Release|Win32.ActiveCfg = Release|Win32
+		{5159759C-57E9-462C-B901-7AEF8A2B2ADC}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

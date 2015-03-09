@@ -25,7 +25,23 @@ extern "C" {
 #define LTRCODE int
 
 #include <stdlib.h>
-#include <inttypes.h>
+#ifdef _MSC_VER
+#  pragma warning( disable: 4996 )
+#  if _MSC_VER >= 1600
+#    include <stdint.h>
+#  else
+typedef __int8 int8_t;
+typedef __int16 int16_t;
+typedef __int32 int32_t;
+typedef __int64 int64_t;
+typedef unsigned __int8 uint8_t;
+typedef unsigned __int16 uint16_t;
+typedef unsigned __int32 uint32_t;
+typedef unsigned __int64 uint64_t;
+#  endif
+#else
+#  include <inttypes.h>
+#endif
 typedef int32_t i32;
 typedef uint32_t u32;
 
@@ -133,6 +149,8 @@ typedef struct ltr_Config
 	// lightmap generation
 	ltr_VEC3 clear_color; /* the color used outside triangles */
 	ltr_VEC3 ambient_color; /* the base color used inside triangles */
+	// RADIOSITY:
+	int bounce_count;
 	// AMBIENT OCCLUSION effect:
 	// ao_factor = 1 - max( raytrace_distance / ao_distance, 1 )
 	// - AO FACTORS are accumulated -

@@ -172,10 +172,10 @@ void TransformNormals( Vec3* out, Vec3* arr, size_t count, const Mat4& matrix )
 //
 void RasterizeTriangle2D( Vec3* image, i32 width, i32 height, const Vec2& p1, const Vec2& p2, const Vec2& p3, const Vec3& va1, const Vec3& va2, const Vec3& va3 )
 {
-	i32 maxX = TMAX( p1.x, TMAX( p2.x, p3.x ) );
-	i32 minX = TMIN( p1.x, TMIN( p2.x, p3.x ) );
-	i32 maxY = TMAX( p1.y, TMAX( p2.y, p3.y ) );
-	i32 minY = TMIN( p1.y, TMIN( p2.y, p3.y ) );
+	i32 maxX = (i32) TMAX( p1.x, TMAX( p2.x, p3.x ) );
+	i32 minX = (i32) TMIN( p1.x, TMIN( p2.x, p3.x ) );
+	i32 maxY = (i32) TMAX( p1.y, TMAX( p2.y, p3.y ) );
+	i32 minY = (i32) TMIN( p1.y, TMIN( p2.y, p3.y ) );
 	
 	if( maxX < 0 || minX >= width || maxY < 0 || minY >= height )
 		return;
@@ -214,10 +214,10 @@ void RasterizeTriangle2D_x2_ex( Vec3* img1, Vec3* img2, i32 width, i32 height, f
 	const Vec3& va1, const Vec3& va2, const Vec3& va3,
 	const Vec3& vb1, const Vec3& vb2, const Vec3& vb3 )
 {
-	i32 maxX = TMAX( p1.x, TMAX( p2.x, p3.x ) ) + margin;
-	i32 minX = TMIN( p1.x, TMIN( p2.x, p3.x ) ) - margin;
-	i32 maxY = TMAX( p1.y, TMAX( p2.y, p3.y ) ) + margin;
-	i32 minY = TMIN( p1.y, TMIN( p2.y, p3.y ) ) - margin;
+	i32 maxX = i32( TMAX( p1.x, TMAX( p2.x, p3.x ) ) + margin );
+	i32 minX = i32( TMIN( p1.x, TMIN( p2.x, p3.x ) ) - margin );
+	i32 maxY = i32( TMAX( p1.y, TMAX( p2.y, p3.y ) ) + margin );
+	i32 minY = i32( TMIN( p1.y, TMIN( p2.y, p3.y ) ) - margin );
 	
 	if( maxX < 0 || minX >= width || maxY < 0 || minY >= height )
 		return;
@@ -319,7 +319,7 @@ float IntersectLineSegmentTriangle( const Vec3& L1, const Vec3& L2, const Vec3& 
 void Generate_Gaussian_Kernel( float* out, int ext, float radius )
 {
 	float sum = 0.0f;
-	float multconst = 1.0f / sqrtf( 2.0f * M_PI * radius * radius );
+	float multconst = 1.0f / sqrtf( 2.0f * (float) M_PI * radius * radius );
 	for( int i = -ext; i <= ext; ++i )
 		sum += out[ i + ext ] = exp( -0.5f * pow( (float) i / radius, 2.0f ) ) * multconst;
 	for( int i = -ext; i <= ext; ++i )
