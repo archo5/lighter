@@ -74,6 +74,7 @@ struct ltr_MeshInstance
 	Vec3Vector m_samples_pos;
 	Vec3Vector m_samples_nrm;
 	U32Vector m_samples_loc;
+	FloatVector m_samples_area;
 	Vec3Vector m_lightmap;
 };
 typedef std::vector< ltr_MeshInstance* > MeshInstPtrVector;
@@ -110,6 +111,7 @@ struct ltr_RadSampleColors
 	Vec3 totalLight;
 	Vec3 outputEnergy;
 	Vec3 inputEnergy;
+	float area;
 };
 typedef std::vector< ltr_RadSampleColors > RadSampleColorsVector;
 
@@ -162,7 +164,7 @@ struct ltr_Scene
 	RadLinkVector m_radLinks;
 	U32Vector m_radLinkMap;
 	
-	Vec3Vector m_tmpRender1;
+	Vec4Vector m_tmpRender1;
 	Vec3Vector m_tmpRender2;
 	BSPTree m_triTree;
 	WorkOutputVector m_workOutput;
@@ -195,15 +197,24 @@ void ltr_Scene::RasterizeInstance( ltr_MeshInstance* mi, float margin )
 			for( u32 tri = 2; tri < mp.m_indexCount; ++tri )
 			{
 				u32 tridx1 = tri, tridx2 = tri + 1 + tri % 2, tridx3 = tri + 2 - tri % 2;
-				tridx1 = indexBase[ tridx1 ];
-				tridx2 = indexBase[ tridx2 ];
-				tridx3 = indexBase[ tridx3 ];
+				
+				tridx1 = O + indexBase[ tridx1 ];
+				tridx2 = O + indexBase[ tridx2 ];
+				tridx3 = O + indexBase[ tridx3 ];
+				
+				float samplearea = CalculateSampleArea(
+					mi->m_ltex[ tridx1 ], mi->m_ltex[ tridx2 ], mi->m_ltex[ tridx3 ],
+					mi->m_vpos[ tridx1 ], mi->m_vpos[ tridx2 ], mi->m_vpos[ tridx3 ]
+				);
+				
 				RasterizeTriangle2D_x2_ex
 				(
 					&m_tmpRender1[0], &m_tmpRender2[0], mi->lm_width, mi->lm_height, margin,
-					mi->m_ltex[ O + tridx1 ], mi->m_ltex[ O + tridx2 ], mi->m_ltex[ O + tridx3 ],
-					mi->m_vpos[ O + tridx1 ], mi->m_vpos[ O + tridx2 ], mi->m_vpos[ O + tridx3 ],
-					mi->m_vnrm[ O + tridx1 ], mi->m_vnrm[ O + tridx2 ], mi->m_vnrm[ O + tridx3 ]
+					mi->m_ltex[ tridx1 ], mi->m_ltex[ tridx2 ], mi->m_ltex[ tridx3 ],
+					V4( mi->m_vpos[ tridx1 ], samplearea ),
+					V4( mi->m_vpos[ tridx2 ], samplearea ),
+					V4( mi->m_vpos[ tridx3 ], samplearea ),
+					mi->m_vnrm[ tridx1 ], mi->m_vnrm[ tridx2 ], mi->m_vnrm[ tridx3 ]
 				);
 			}
 		}
@@ -212,15 +223,24 @@ void ltr_Scene::RasterizeInstance( ltr_MeshInstance* mi, float margin )
 			for( u32 tri = 0; tri < mp.m_indexCount; tri += 3 )
 			{
 				u32 tridx1 = tri, tridx2 = tri + 1, tridx3 = tri + 2;
-				tridx1 = indexBase[ tridx1 ];
-				tridx2 = indexBase[ tridx2 ];
-				tridx3 = indexBase[ tridx3 ];
+				
+				tridx1 = O + indexBase[ tridx1 ];
+				tridx2 = O + indexBase[ tridx2 ];
+				tridx3 = O + indexBase[ tridx3 ];
+				
+				float samplearea = CalculateSampleArea(
+					mi->m_ltex[ tridx1 ], mi->m_ltex[ tridx2 ], mi->m_ltex[ tridx3 ],
+					mi->m_vpos[ tridx1 ], mi->m_vpos[ tridx2 ], mi->m_vpos[ tridx3 ]
+				);
+				
 				RasterizeTriangle2D_x2_ex
 				(
 					&m_tmpRender1[0], &m_tmpRender2[0], mi->lm_width, mi->lm_height, margin,
-					mi->m_ltex[ O + tridx1 ], mi->m_ltex[ O + tridx2 ], mi->m_ltex[ O + tridx3 ],
-					mi->m_vpos[ O + tridx1 ], mi->m_vpos[ O + tridx2 ], mi->m_vpos[ O + tridx3 ],
-					mi->m_vnrm[ O + tridx1 ], mi->m_vnrm[ O + tridx2 ], mi->m_vnrm[ O + tridx3 ]
+					mi->m_ltex[ tridx1 ], mi->m_ltex[ tridx2 ], mi->m_ltex[ tridx3 ],
+					V4( mi->m_vpos[ tridx1 ], samplearea ),
+					V4( mi->m_vpos[ tridx2 ], samplearea ),
+					V4( mi->m_vpos[ tridx3 ], samplearea ),
+					mi->m_vnrm[ tridx1 ], mi->m_vnrm[ tridx2 ], mi->m_vnrm[ tridx3 ]
 				);
 			}
 		}
@@ -375,7 +395,7 @@ void ltr_Scene::DoWork()
 			if( m_tmpRender2.size() < mi->lm_width * mi->lm_height )
 				m_tmpRender2.resize( mi->lm_width * mi->lm_height );
 			
-			TMEMSET( &m_tmpRender1[0], m_tmpRender1.size(), Vec3::Create(0) );
+			TMEMSET( &m_tmpRender1[0], m_tmpRender1.size(), V4(0) );
 			TMEMSET( &m_tmpRender2[0], m_tmpRender2.size(), Vec3::Create(0) );
 			
 			// first do excessive rasterization
@@ -398,12 +418,14 @@ void ltr_Scene::DoWork()
 			mi->m_samples_pos.reserve( sample_count );
 			mi->m_samples_nrm.reserve( sample_count );
 			mi->m_samples_loc.reserve( sample_count );
+			mi->m_samples_area.reserve( sample_count );
 			for( size_t i = 0; i < m_tmpRender2.size(); ++i )
 			{
 				Vec3& N = m_tmpRender2[ i ];
 				if( !N.IsZero() )
 				{
-					Vec3 P = m_tmpRender1[ i ];
+					Vec3 P = m_tmpRender1[ i ].ToVec3();
+					float A = m_tmpRender1[ i ].w;
 					if( config.max_correct_dist )
 					{
 						int itsleft = 100;
@@ -424,6 +446,7 @@ void ltr_Scene::DoWork()
 					mi->m_samples_pos.push_back( P );
 					mi->m_samples_nrm.push_back( N );
 					mi->m_samples_loc.push_back( i );
+					mi->m_samples_area.push_back( A );
 				}
 			}
 			mi->m_lightmap.resize( sample_count );
@@ -526,14 +549,40 @@ void ltr_Scene::DoWork()
 			ltr_MeshInstance* mi = m_meshInstances[ mi_id ];
 			for( size_t i = 0; i < mi->m_lightmap.size(); ++i )
 			{
-				ltr_RadSampleGeom RSG = { mi->m_samples_pos[ i ], mi->m_samples_nrm[ i ].Normalized() };
+				ltr_Mesh* mesh = mi->mesh;
+				const Vec3& P = mi->m_samples_pos[ i ];
+				const Vec3& N = mi->m_samples_nrm[ i ].Normalized();
+				
+				ltr_RadSampleGeom RSG = { P, N };
 				m_radSampleGeoms.push_back( RSG );
 				
-				ltr_RadSampleColors RSC = { Vec3::Create(1), mi->m_lightmap[ i ], mi->m_lightmap[ i ], Vec3::Create(0) };
+				Vec3 s_diff = {1,1,1};
+				Vec3 s_emit = mi->m_lightmap[ i ];
+				if( config.sample_fn )
+				{
+					ltr_SampleRequest REQ =
+					{
+						{ P.x, P.y, P.z },
+						{ N.x, N.y, N.z },
+						0, 0, // TODO
+						0, 0, // TODO
+						mesh->m_ident.c_str(), mesh->m_ident.size(),
+						mi->m_ident.c_str(), mi->m_ident.size(),
+						{ 1, 1, 1 },
+						{ 0, 0, 0 },
+					};
+					if( config.sample_fn( &config, &REQ ) )
+					{
+						s_diff = Vec3::CreateFromPtr( REQ.out_diffuse_color );
+						s_emit += Vec3::CreateFromPtr( REQ.out_emissive_color );
+					}
+				}
+				
+				ltr_RadSampleColors RSC = { s_diff, s_emit, s_emit, Vec3::Create(0), mi->m_samples_area[ i ] };
 				m_radSampleColors.push_back( RSC );
 			}
 		}
-		printf( "SAMPLE COUNT: %d\n", (int) m_radSampleGeoms.size() );
+		
 		for( size_t i = 0; i < m_radSampleGeoms.size(); ++i )
 		{
 			m_radLinkMap.push_back( m_radLinks.size() ); // offset
@@ -585,8 +634,8 @@ void ltr_Scene::DoWork()
 				ltr_RadSampleColors& A_RSC = m_radSampleColors[ i ];
 				ltr_RadSampleColors& B_RSC = m_radSampleColors[ j ];
 				
-				Vec3 A_out = ( A_RSC.outputEnergy * A_RSC.diffuseColor ) * f;
-				Vec3 B_out = ( B_RSC.outputEnergy * B_RSC.diffuseColor ) * f;
+				Vec3 A_out = ( A_RSC.outputEnergy * A_RSC.diffuseColor ) * A_RSC.area * f;
+				Vec3 B_out = ( B_RSC.outputEnergy * B_RSC.diffuseColor ) * B_RSC.area * f;
 				
 				A_RSC.totalLight += B_out;
 				B_RSC.totalLight += A_out;
@@ -830,6 +879,7 @@ void ltr_GetConfig( ltr_Config* cfg, ltr_Scene* opt_scene )
 	LTR_VEC3_SET( cfg->ambient_color, 0, 0, 0 );
 	
 	cfg->bounce_count = 0;
+	cfg->sample_fn = NULL;
 	
 	cfg->ao_distance = 0;
 	cfg->ao_multiplier = 1.2f;

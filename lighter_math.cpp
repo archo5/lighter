@@ -134,17 +134,37 @@ bool Mat4::InvertTo( Mat4& out )
 }
 
 
+static FORCEINLINE float TriangleArea( float a, float b, float c )
+{
+	float p = ( a + b + c ) * 0.5f;
+	float presqrt = p * ( p - a ) * ( p - b ) * ( p - c );
+	if( presqrt < 0 )
+		return 0;
+	return sqrtf( presqrt );
+}
+
+float TriangleArea( const Vec2& P1, const Vec2& P2, const Vec2& P3 )
+{
+	float a = ( P2 - P1 ).Length();
+	float b = ( P3 - P2 ).Length();
+	float c = ( P1 - P3 ).Length();
+	return TriangleArea( a, b, c );
+}
 
 float TriangleArea( const Vec3& P1, const Vec3& P2, const Vec3& P3 )
 {
 	float a = ( P2 - P1 ).Length();
 	float b = ( P3 - P2 ).Length();
 	float c = ( P1 - P3 ).Length();
-	float p = ( a + b + c ) * 0.5f;
-	float presqrt = p * ( p - a ) * ( p - b ) * ( p - c );
-	if( presqrt < 0 )
-		return 0;
-	return sqrtf( presqrt );
+	return TriangleArea( a, b, c );
+}
+
+float CalculateSampleArea( const Vec2& tex1, const Vec2& tex2, const Vec2& tex3, const Vec3& pos1, const Vec3& pos2, const Vec3& pos3 )
+{
+	float lmarea = TriangleArea( tex1, tex2, tex3 );
+	float coarea = TriangleArea( pos1, pos2, pos3 );
+	
+	return lmarea > 0 ? coarea / lmarea : 0;
 }
 
 
@@ -209,9 +229,9 @@ void RasterizeTriangle2D( Vec3* image, i32 width, i32 height, const Vec2& p1, co
 	}
 }
 
-void RasterizeTriangle2D_x2_ex( Vec3* img1, Vec3* img2, i32 width, i32 height, float margin,
+void RasterizeTriangle2D_x2_ex( Vec4* img1, Vec3* img2, i32 width, i32 height, float margin,
 	const Vec2& p1, const Vec2& p2, const Vec2& p3,
-	const Vec3& va1, const Vec3& va2, const Vec3& va3,
+	const Vec4& va1, const Vec4& va2, const Vec4& va3,
 	const Vec3& vb1, const Vec3& vb2, const Vec3& vb3 )
 {
 	i32 maxX = i32( TMAX( p1.x, TMAX( p2.x, p3.x ) ) + margin );
@@ -240,7 +260,7 @@ void RasterizeTriangle2D_x2_ex( Vec3* img1, Vec3* img2, i32 width, i32 height, f
 	float d3 = Vec2Dot( n3, p3 );
 	float MG = margin;
 	
-	Vec3 va1va2 = va2 - va1, va1va3 = va3 - va1;
+	Vec4 va1va2 = va2 - va1, va1va3 = va3 - va1;
 	Vec3 vb1vb2 = vb2 - vb1, vb1vb3 = vb3 - vb1;
 	
 	for( i32 x = minX; x <= maxX; x++ )

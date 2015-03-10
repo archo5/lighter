@@ -123,6 +123,23 @@ typedef struct ltr_SampleInfo
 }
 ltr_SampleInfo;
 
+typedef struct ltr_SampleRequest
+{
+	ltr_VEC3 position;
+	ltr_VEC3 normal;
+	float tex0u, tex0v;
+	float tex1u, tex1v;
+	
+	const char* mesh_ident;
+	size_t mesh_ident_size;
+	const char* inst_ident;
+	size_t inst_ident_size;
+	
+	ltr_VEC3 out_diffuse_color;
+	ltr_VEC3 out_emissive_color;
+}
+ltr_SampleRequest;
+
 typedef struct ltr_Config
 {
 	// callbacks
@@ -151,6 +168,11 @@ typedef struct ltr_Config
 	ltr_VEC3 ambient_color; /* the base color used inside triangles */
 	// RADIOSITY:
 	int bounce_count;
+	LTRBOOL (*sample_fn)
+	(
+		ltr_Config* /* config */,
+		ltr_SampleRequest* /* req */
+	);
 	// AMBIENT OCCLUSION effect:
 	// ao_factor = 1 - max( raytrace_distance / ao_distance, 1 )
 	// - AO FACTORS are accumulated -

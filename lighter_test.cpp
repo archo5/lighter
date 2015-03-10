@@ -371,6 +371,17 @@ void testfunc_mesh2()
 	ltr_DestroyScene( scene );
 }
 
+LTRBOOL rad1_samplefunc( ltr_Config* cfg, ltr_SampleRequest* req )
+{
+	if( req->position[0] <= -3 && Vec3Dot( Vec3::CreateFromPtr( req->normal ), Vec3::Create( 1, 0, 0 ) ) > 0.1f )
+	{
+		req->out_diffuse_color[0] = 0.5f;
+		req->out_diffuse_color[1] = 0.05f;
+		req->out_diffuse_color[2] = 0.02f;
+	}
+	return 1;
+}
+
 void testfunc_rad1()
 {
 	puts( "LIGHTER test [rad1]" );
@@ -381,6 +392,7 @@ void testfunc_rad1()
 	ltr_GetConfig( &cfg, scene );
 	cfg.ao_distance = 2;
 	cfg.bounce_count = 2;
+	cfg.sample_fn = rad1_samplefunc;
 	ltr_SetConfig( scene, &cfg );
 	
 	// MESH 1
@@ -409,7 +421,7 @@ void testfunc_rad1()
 	// LIGHTS
 	ltr_LightInfo lights[] =
 	{
-		{ LTR_LT_POINT, { 10.18f, 0, 1.40f }, {0,0,0}, {0,0,0}, { 0.9f, 0.7f, 0.5f }, 16.0f, 1.0f, 0.1f, 5 },
+		{ LTR_LT_POINT, { 10.18f, 0, 1.40f }, {0,0,0}, {0,0,0}, { 0.99f, 0.97f, 0.95f }, 24.0f, 1.0f, 0.1f, 5 },
 //		{ LTR_LT_POINT, { 2.18f, 4.04f, 1.40f }, {0,0,0}, {0,0,0}, { 0.5f, 0.7f, 0.9f }, 16.0f, 1.0f, 0.1f, 5 },
 //		{ LTR_LT_SPOT, { 0, 0, 1.60f }, {0,0,-1}, {1,0,0}, { 0.7f, 0.1f, 0.05f }, 16.0f, 1.0f, 0.1f, 5, 45.0f, 25.0f, 0.5f },
 	};

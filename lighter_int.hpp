@@ -230,6 +230,22 @@ Vec3 Vec3::CreateSpiralDirVector( const Vec3& dir, float randoff, int i, int sam
 }
 
 
+struct Vec4
+{
+	float x, y, z, w;
+	
+	FORCEINLINE Vec4 operator + ( const Vec4& o ) const { Vec4 v = { x + o.x, y + o.y, z + o.z, w + o.w }; return v; }
+	FORCEINLINE Vec4 operator - ( const Vec4& o ) const { Vec4 v = { x - o.x, y - o.y, z - o.z, w - o.w }; return v; }
+
+	FORCEINLINE Vec4 operator * ( float f ) const { Vec4 v = { x * f, y * f, z * f, w * f }; return v; }
+	
+	Vec3 ToVec3() const { return Vec3::Create( x, y, z ); }
+};
+static FORCEINLINE Vec4 V4( float x ){ Vec4 o = { x, x, x, x }; return o; }
+static FORCEINLINE Vec4 V4( float x, float y, float z, float w ){ Vec4 o = { x, y, z, w }; return o; }
+static FORCEINLINE Vec4 V4( const Vec3& v, float w ){ Vec4 o = { v.x, v.y, v.z, w }; return o; }
+
+
 struct Mat4
 {
 	union
@@ -303,18 +319,20 @@ typedef std::vector< u32 > U32Vector;
 typedef std::vector< float > FloatVector;
 typedef std::vector< Vec2 > Vec2Vector;
 typedef std::vector< Vec3 > Vec3Vector;
+typedef std::vector< Vec4 > Vec4Vector;
 typedef std::vector< Mat4 > Mat4Vector;
 typedef std::vector< ltr_WorkOutput > WorkOutputVector;
 
 
 float TriangleArea( const Vec3& P1, const Vec3& P2, const Vec3& P3 );
+float CalculateSampleArea( const Vec2& tex1, const Vec2& tex2, const Vec2& tex3, const Vec3& pos1, const Vec3& pos2, const Vec3& pos3 );
 
 void TransformPositions( Vec3* out, Vec3* arr, size_t count, const Mat4& matrix );
 void TransformNormals( Vec3* out, Vec3* arr, size_t count, const Mat4& matrix );
 void RasterizeTriangle2D( Vec3* image, i32 width, i32 height, const Vec2& p1, const Vec2& p2, const Vec2& p3, const Vec3& v1, const Vec3& v2, const Vec3& v3 );
-void RasterizeTriangle2D_x2_ex( Vec3* img1, Vec3* img2, i32 width, i32 height, float margin,
+void RasterizeTriangle2D_x2_ex( Vec4* img1, Vec3* img2, i32 width, i32 height, float margin,
 	const Vec2& p1, const Vec2& p2, const Vec2& p3,
-	const Vec3& va1, const Vec3& va2, const Vec3& va3,
+	const Vec4& va1, const Vec4& va2, const Vec4& va3,
 	const Vec3& vb1, const Vec3& vb2, const Vec3& vb3 );
 
 
