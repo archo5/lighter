@@ -373,6 +373,7 @@ void testfunc_mesh2()
 
 LTRBOOL rad1_samplefunc( ltr_Config* cfg, ltr_SampleRequest* req )
 {
+//	printf( "T1[ %g %g ] T2[ %g %g ]\n", req->tex0u, req->tex0v, req->tex1u, req->tex1v );
 	if( req->position[0] <= -3 && Vec3Dot( Vec3::CreateFromPtr( req->normal ), Vec3::Create( 1, 0, 0 ) ) > 0.1f )
 	{
 		req->out_diffuse_color[0] = 0.5f;

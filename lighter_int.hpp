@@ -330,10 +330,11 @@ float CalculateSampleArea( const Vec2& tex1, const Vec2& tex2, const Vec2& tex3,
 void TransformPositions( Vec3* out, Vec3* arr, size_t count, const Mat4& matrix );
 void TransformNormals( Vec3* out, Vec3* arr, size_t count, const Mat4& matrix );
 void RasterizeTriangle2D( Vec3* image, i32 width, i32 height, const Vec2& p1, const Vec2& p2, const Vec2& p3, const Vec3& v1, const Vec3& v2, const Vec3& v3 );
-void RasterizeTriangle2D_x2_ex( Vec4* img1, Vec3* img2, i32 width, i32 height, float margin,
+void RasterizeTriangle2D_x2_ex( Vec3* img1, Vec3* img2, Vec4* img3, i32 width, i32 height, float margin,
 	const Vec2& p1, const Vec2& p2, const Vec2& p3,
-	const Vec4& va1, const Vec4& va2, const Vec4& va3,
-	const Vec3& vb1, const Vec3& vb2, const Vec3& vb3 );
+	const Vec3& va1, const Vec3& va2, const Vec3& va3,
+	const Vec3& vb1, const Vec3& vb2, const Vec3& vb3,
+	const Vec4& vc1, const Vec4& vc2, const Vec4& vc3 );
 
 
 void Generate_Gaussian_Kernel( float* out, int ext, float radius );

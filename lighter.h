@@ -129,6 +129,7 @@ typedef struct ltr_SampleRequest
 	ltr_VEC3 normal;
 	float tex0u, tex0v;
 	float tex1u, tex1v;
+	uint32_t part_id;
 	
 	const char* mesh_ident;
 	size_t mesh_ident_size;

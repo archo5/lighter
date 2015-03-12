@@ -68,13 +68,14 @@ struct ltr_MeshInstance
 	// tmp
 	Vec3Vector m_vpos;
 	Vec3Vector m_vnrm;
+	Vec2Vector m_vtex;
 	Vec2Vector m_ltex;
 	
 	// output
 	Vec3Vector m_samples_pos;
 	Vec3Vector m_samples_nrm;
 	U32Vector m_samples_loc;
-	FloatVector m_samples_area;
+	Vec4Vector m_samples_radinfo;
 	Vec3Vector m_lightmap;
 };
 typedef std::vector< ltr_MeshInstance* > MeshInstPtrVector;
@@ -164,8 +165,9 @@ struct ltr_Scene
 	RadLinkVector m_radLinks;
 	U32Vector m_radLinkMap;
 	
-	Vec4Vector m_tmpRender1;
+	Vec3Vector m_tmpRender1;
 	Vec3Vector m_tmpRender2;
+	Vec4Vector m_tmpRender3;
 	BSPTree m_triTree;
 	WorkOutputVector m_workOutput;
 	
@@ -209,12 +211,13 @@ void ltr_Scene::RasterizeInstance( ltr_MeshInstance* mi, float margin )
 				
 				RasterizeTriangle2D_x2_ex
 				(
-					&m_tmpRender1[0], &m_tmpRender2[0], mi->lm_width, mi->lm_height, margin,
+					&m_tmpRender1[0], &m_tmpRender2[0], &m_tmpRender3[0], mi->lm_width, mi->lm_height, margin,
 					mi->m_ltex[ tridx1 ], mi->m_ltex[ tridx2 ], mi->m_ltex[ tridx3 ],
-					V4( mi->m_vpos[ tridx1 ], samplearea ),
-					V4( mi->m_vpos[ tridx2 ], samplearea ),
-					V4( mi->m_vpos[ tridx3 ], samplearea ),
-					mi->m_vnrm[ tridx1 ], mi->m_vnrm[ tridx2 ], mi->m_vnrm[ tridx3 ]
+					mi->m_vpos[ tridx1 ], mi->m_vpos[ tridx2 ], mi->m_vpos[ tridx3 ],
+					mi->m_vnrm[ tridx1 ], mi->m_vnrm[ tridx2 ], mi->m_vnrm[ tridx3 ],
+					V4( mi->m_vtex[ tridx1 ].x, mi->m_vtex[ tridx1 ].y, (float) part, samplearea ),
+					V4( mi->m_vtex[ tridx2 ].x, mi->m_vtex[ tridx2 ].y, (float) part, samplearea ),
+					V4( mi->m_vtex[ tridx3 ].x, mi->m_vtex[ tridx3 ].y, (float) part, samplearea )
 				);
 			}
 		}
@@ -235,12 +238,13 @@ void ltr_Scene::RasterizeInstance( ltr_MeshInstance* mi, float margin )
 				
 				RasterizeTriangle2D_x2_ex
 				(
-					&m_tmpRender1[0], &m_tmpRender2[0], mi->lm_width, mi->lm_height, margin,
+					&m_tmpRender1[0], &m_tmpRender2[0], &m_tmpRender3[0], mi->lm_width, mi->lm_height, margin,
 					mi->m_ltex[ tridx1 ], mi->m_ltex[ tridx2 ], mi->m_ltex[ tridx3 ],
-					V4( mi->m_vpos[ tridx1 ], samplearea ),
-					V4( mi->m_vpos[ tridx2 ], samplearea ),
-					V4( mi->m_vpos[ tridx3 ], samplearea ),
-					mi->m_vnrm[ tridx1 ], mi->m_vnrm[ tridx2 ], mi->m_vnrm[ tridx3 ]
+					mi->m_vpos[ tridx1 ], mi->m_vpos[ tridx2 ], mi->m_vpos[ tridx3 ],
+					mi->m_vnrm[ tridx1 ], mi->m_vnrm[ tridx2 ], mi->m_vnrm[ tridx3 ],
+					V4( mi->m_vtex[ tridx1 ].x, mi->m_vtex[ tridx1 ].y, (float) part, samplearea ),
+					V4( mi->m_vtex[ tridx2 ].x, mi->m_vtex[ tridx2 ].y, (float) part, samplearea ),
+					V4( mi->m_vtex[ tridx3 ].x, mi->m_vtex[ tridx3 ].y, (float) part, samplearea )
 				);
 			}
 		}
@@ -288,6 +292,7 @@ void ltr_Scene::DoWork()
 			
 			mi->m_vpos.resize( mesh->m_vpos.size() );
 			mi->m_vnrm.resize( mesh->m_vnrm.size() );
+			mi->m_vtex.resize( mesh->m_vtex1.size() );
 			mi->m_ltex.resize( mesh->m_vtex2.size() );
 			
 			TransformPositions( &mi->m_vpos[0], &mesh->m_vpos[0], mesh->m_vpos.size(), mi->matrix );
@@ -337,7 +342,10 @@ void ltr_Scene::DoWork()
 			// transform texcoords
 			Vec2 lsize = Vec2::Create( (float) mi->lm_width, (float) mi->lm_height );
 			for( size_t i = 0; i < mi->m_ltex.size(); ++i )
+			{
+				mi->m_vtex[ i ] = mesh->m_vtex1[ i ];
 				mi->m_ltex[ i ] = mesh->m_vtex2[ i ] * lsize - Vec2::Create(0.5f);
+			}
 		}
 		break;
 		
@@ -394,9 +402,12 @@ void ltr_Scene::DoWork()
 				m_tmpRender1.resize( mi->lm_width * mi->lm_height );
 			if( m_tmpRender2.size() < mi->lm_width * mi->lm_height )
 				m_tmpRender2.resize( mi->lm_width * mi->lm_height );
+			if( m_tmpRender3.size() < mi->lm_width * mi->lm_height )
+				m_tmpRender3.resize( mi->lm_width * mi->lm_height );
 			
-			TMEMSET( &m_tmpRender1[0], m_tmpRender1.size(), V4(0) );
+			TMEMSET( &m_tmpRender1[0], m_tmpRender1.size(), Vec3::Create(0) );
 			TMEMSET( &m_tmpRender2[0], m_tmpRender2.size(), Vec3::Create(0) );
+			TMEMSET( &m_tmpRender3[0], m_tmpRender3.size(), V4(0) );
 			
 			// first do excessive rasterization
 			RasterizeInstance( mi, 2.0f + SMALL_FLOAT );
@@ -418,14 +429,14 @@ void ltr_Scene::DoWork()
 			mi->m_samples_pos.reserve( sample_count );
 			mi->m_samples_nrm.reserve( sample_count );
 			mi->m_samples_loc.reserve( sample_count );
-			mi->m_samples_area.reserve( sample_count );
+			mi->m_samples_radinfo.reserve( sample_count );
 			for( size_t i = 0; i < m_tmpRender2.size(); ++i )
 			{
 				Vec3& N = m_tmpRender2[ i ];
 				if( !N.IsZero() )
 				{
-					Vec3 P = m_tmpRender1[ i ].ToVec3();
-					float A = m_tmpRender1[ i ].w;
+					Vec3 P = m_tmpRender1[ i ];
+					Vec4 XD = m_tmpRender3[ i ];
 					if( config.max_correct_dist )
 					{
 						int itsleft = 100;
@@ -446,7 +457,7 @@ void ltr_Scene::DoWork()
 					mi->m_samples_pos.push_back( P );
 					mi->m_samples_nrm.push_back( N );
 					mi->m_samples_loc.push_back( i );
-					mi->m_samples_area.push_back( A );
+					mi->m_samples_radinfo.push_back( XD );
 				}
 			}
 			mi->m_lightmap.resize( sample_count );
@@ -552,6 +563,7 @@ void ltr_Scene::DoWork()
 				ltr_Mesh* mesh = mi->mesh;
 				const Vec3& P = mi->m_samples_pos[ i ];
 				const Vec3& N = mi->m_samples_nrm[ i ].Normalized();
+				const size_t L = mi->m_samples_loc[ i ];
 				
 				ltr_RadSampleGeom RSG = { P, N };
 				m_radSampleGeoms.push_back( RSG );
@@ -560,12 +572,15 @@ void ltr_Scene::DoWork()
 				Vec3 s_emit = mi->m_lightmap[ i ];
 				if( config.sample_fn )
 				{
+					int LMX = L % mi->lm_width;
+					int LMY = L / mi->lm_width;
 					ltr_SampleRequest REQ =
 					{
 						{ P.x, P.y, P.z },
 						{ N.x, N.y, N.z },
-						0, 0, // TODO
-						0, 0, // TODO
+						mi->m_samples_radinfo[ i ].x, mi->m_samples_radinfo[ i ].y,
+						( LMX + 0.5f ) / mi->lm_width, ( LMY + 0.5f ) / mi->lm_height,
+						(uint32_t) mi->m_samples_radinfo[ i ].z, // should not be interpolated between triangles
 						mesh->m_ident.c_str(), mesh->m_ident.size(),
 						mi->m_ident.c_str(), mi->m_ident.size(),
 						{ 1, 1, 1 },
@@ -578,7 +593,7 @@ void ltr_Scene::DoWork()
 					}
 				}
 				
-				ltr_RadSampleColors RSC = { s_diff, s_emit, s_emit, Vec3::Create(0), mi->m_samples_area[ i ] };
+				ltr_RadSampleColors RSC = { s_diff, s_emit, s_emit, Vec3::Create(0), mi->m_samples_radinfo[ i ].w };
 				m_radSampleColors.push_back( RSC );
 			}
 		}

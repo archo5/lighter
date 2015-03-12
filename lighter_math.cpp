@@ -229,10 +229,11 @@ void RasterizeTriangle2D( Vec3* image, i32 width, i32 height, const Vec2& p1, co
 	}
 }
 
-void RasterizeTriangle2D_x2_ex( Vec4* img1, Vec3* img2, i32 width, i32 height, float margin,
+void RasterizeTriangle2D_x2_ex( Vec3* img1, Vec3* img2, Vec4* img3, i32 width, i32 height, float margin,
 	const Vec2& p1, const Vec2& p2, const Vec2& p3,
-	const Vec4& va1, const Vec4& va2, const Vec4& va3,
-	const Vec3& vb1, const Vec3& vb2, const Vec3& vb3 )
+	const Vec3& va1, const Vec3& va2, const Vec3& va3,
+	const Vec3& vb1, const Vec3& vb2, const Vec3& vb3,
+	const Vec4& vc1, const Vec4& vc2, const Vec4& vc3 )
 {
 	i32 maxX = i32( TMAX( p1.x, TMAX( p2.x, p3.x ) ) + margin );
 	i32 minX = i32( TMIN( p1.x, TMIN( p2.x, p3.x ) ) - margin );
@@ -260,8 +261,9 @@ void RasterizeTriangle2D_x2_ex( Vec4* img1, Vec3* img2, i32 width, i32 height, f
 	float d3 = Vec2Dot( n3, p3 );
 	float MG = margin;
 	
-	Vec4 va1va2 = va2 - va1, va1va3 = va3 - va1;
+	Vec3 va1va2 = va2 - va1, va1va3 = va3 - va1;
 	Vec3 vb1vb2 = vb2 - vb1, vb1vb3 = vb3 - vb1;
+	Vec4 vc1vc2 = vc2 - vc1, vc1vc3 = vc3 - vc1;
 	
 	for( i32 x = minX; x <= maxX; x++ )
 	{
@@ -278,6 +280,7 @@ void RasterizeTriangle2D_x2_ex( Vec4* img1, Vec3* img2, i32 width, i32 height, f
 			{
 				img1[ x + width * y ] = va1 + va1va2 * s + va1va3 * t;
 				img2[ x + width * y ] = vb1 + vb1vb2 * s + vb1vb3 * t;
+				img3[ x + width * y ] = vc1 + vc1vc2 * s + vc1vc3 * t;
 			}
 		}
 	}
