@@ -563,15 +563,20 @@ void ltr_Scene::DoWork()
 				ltr_Mesh* mesh = mi->mesh;
 				const Vec3& P = mi->m_samples_pos[ i ];
 				const Vec3& N = mi->m_samples_nrm[ i ].Normalized();
-				const size_t L = mi->m_samples_loc[ i ];
 				
 				ltr_RadSampleGeom RSG = { P, N };
 				m_radSampleGeoms.push_back( RSG );
 				
 				Vec3 s_diff = {1,1,1};
 				Vec3 s_emit = mi->m_lightmap[ i ];
-				if( config.sample_fn )
+				float s_area = mi->m_samplecont ? 0 : mi->m_samples_radinfo[ i ].w;
+				if( mi->m_samplecont )
 				{
+					s_diff = Vec3::Create(0);
+				}
+				else if( config.sample_fn )
+				{
+					const size_t L = mi->m_samples_loc[ i ];
 					int LMX = L % mi->lm_width;
 					int LMY = L / mi->lm_width;
 					ltr_SampleRequest REQ =
@@ -593,7 +598,7 @@ void ltr_Scene::DoWork()
 					}
 				}
 				
-				ltr_RadSampleColors RSC = { s_diff, s_emit, s_emit, Vec3::Create(0), mi->m_samples_radinfo[ i ].w };
+				ltr_RadSampleColors RSC = { s_diff, s_emit, s_emit, Vec3::Create(0), s_area };
 				m_radSampleColors.push_back( RSC );
 			}
 		}
