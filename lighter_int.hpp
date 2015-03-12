@@ -42,6 +42,8 @@
 
 FORCEINLINE float randf(){ return (float) rand() / (float) RAND_MAX; }
 
+double ltr_gettime();
+
 
 template< class T > T TMIN( const T& a, const T& b ){ return a < b ? a : b; }
 template< class T > T TMAX( const T& a, const T& b ){ return a > b ? a : b; }

@@ -410,9 +410,9 @@ void ltr_Scene::DoWork()
 			TMEMSET( &m_tmpRender3[0], m_tmpRender3.size(), V4(0) );
 			
 			// first do excessive rasterization
-			RasterizeInstance( mi, 2.0f + SMALL_FLOAT );
-			RasterizeInstance( mi, 1.5f + SMALL_FLOAT );
-			RasterizeInstance( mi, 1.0f + SMALL_FLOAT );
+		//	RasterizeInstance( mi, 2.0f + SMALL_FLOAT );
+		//	RasterizeInstance( mi, 1.5f + SMALL_FLOAT );
+		//	RasterizeInstance( mi, 1.0f + SMALL_FLOAT );
 			RasterizeInstance( mi, 0.5f + SMALL_FLOAT );
 			
 			// then do proper rasterization
@@ -555,89 +555,103 @@ void ltr_Scene::DoWork()
 		break;
 		
 	case LTR_WT_RDGENLNK:
-		for( size_t mi_id = 0; mi_id < m_meshInstances.size(); ++mi_id )
 		{
-			ltr_MeshInstance* mi = m_meshInstances[ mi_id ];
-			for( size_t i = 0; i < mi->m_lightmap.size(); ++i )
-			{
-				ltr_Mesh* mesh = mi->mesh;
-				const Vec3& P = mi->m_samples_pos[ i ];
-				const Vec3& N = mi->m_samples_nrm[ i ].Normalized();
-				
-				ltr_RadSampleGeom RSG = { P, N };
-				m_radSampleGeoms.push_back( RSG );
-				
-				Vec3 s_diff = {1,1,1};
-				Vec3 s_emit = mi->m_lightmap[ i ];
-				float s_area = mi->m_samplecont ? 0 : mi->m_samples_radinfo[ i ].w;
-				if( mi->m_samplecont )
-				{
-					s_diff = Vec3::Create(0);
-				}
-				else if( config.sample_fn )
-				{
-					const size_t L = mi->m_samples_loc[ i ];
-					int LMX = L % mi->lm_width;
-					int LMY = L / mi->lm_width;
-					ltr_SampleRequest REQ =
-					{
-						{ P.x, P.y, P.z },
-						{ N.x, N.y, N.z },
-						mi->m_samples_radinfo[ i ].x, mi->m_samples_radinfo[ i ].y,
-						( LMX + 0.5f ) / mi->lm_width, ( LMY + 0.5f ) / mi->lm_height,
-						(uint32_t) mi->m_samples_radinfo[ i ].z, // should not be interpolated between triangles
-						mesh->m_ident.c_str(), mesh->m_ident.size(),
-						mi->m_ident.c_str(), mi->m_ident.size(),
-						{ 1, 1, 1 },
-						{ 0, 0, 0 },
-					};
-					if( config.sample_fn( &config, &REQ ) )
-					{
-						s_diff = Vec3::CreateFromPtr( REQ.out_diffuse_color );
-						s_emit += Vec3::CreateFromPtr( REQ.out_emissive_color );
-					}
-				}
-				
-				ltr_RadSampleColors RSC = { s_diff, s_emit, s_emit, Vec3::Create(0), s_area };
-				m_radSampleColors.push_back( RSC );
-			}
-		}
-		
-		for( size_t i = 0; i < m_radSampleGeoms.size(); ++i )
-		{
-			m_radLinkMap.push_back( m_radLinks.size() ); // offset
-			m_radLinkMap.push_back( 0 ); // count
+#ifdef LTRDEBUG
+			double t0 = ltr_gettime();
+#endif
 			
-			const Vec3& A_SP = m_radSampleGeoms[ i ].pos;
-			const Vec3& A_SN = m_radSampleGeoms[ i ].normal;
-			for( size_t j = i + 1; j < m_radSampleGeoms.size(); ++j )
+			for( size_t mi_id = 0; mi_id < m_meshInstances.size(); ++mi_id )
 			{
-				const Vec3& B_SP = m_radSampleGeoms[ j ].pos;
-				const Vec3& B_SN = m_radSampleGeoms[ j ].normal;
-				
-				Vec3 posdiff = B_SP - A_SP;
-				float dotA = Vec3Dot( A_SN, posdiff );
-				float dotB = Vec3Dot( B_SN, -posdiff );
-				if( dotA <= SMALL_FLOAT || dotB <= SMALL_FLOAT )
-					continue;
-				
-				float lensq = posdiff.LengthSq();
-				float len = sqrt( lensq );
-				dotA /= len;
-				dotB /= len;
-				
-				float factor = dotA * dotB / ( (float) M_PI * lensq );
-				if( factor < SMALL_FLOAT )
-					continue;
-				
-				if( VisibilityTest( A_SP, B_SP ) < 1.0f )
-					continue;
-				
-				// add sample
-				ltr_RadLink RL = { (uint32_t) j, factor };
-				m_radLinks.push_back( RL );
-				m_radLinkMap.back()++;
+				ltr_MeshInstance* mi = m_meshInstances[ mi_id ];
+				for( size_t i = 0; i < mi->m_lightmap.size(); ++i )
+				{
+					ltr_Mesh* mesh = mi->mesh;
+					const Vec3& P = mi->m_samples_pos[ i ];
+					const Vec3& N = mi->m_samples_nrm[ i ].Normalized();
+					
+					ltr_RadSampleGeom RSG = { P, N };
+					m_radSampleGeoms.push_back( RSG );
+					
+					Vec3 s_diff = {1,1,1};
+					Vec3 s_emit = mi->m_lightmap[ i ];
+					float s_area = mi->m_samplecont ? 0 : mi->m_samples_radinfo[ i ].w;
+					if( mi->m_samplecont )
+					{
+						s_diff = Vec3::Create(0);
+					}
+					else if( config.sample_fn )
+					{
+						const size_t L = mi->m_samples_loc[ i ];
+						int LMX = L % mi->lm_width;
+						int LMY = L / mi->lm_width;
+						ltr_SampleRequest REQ =
+						{
+							{ P.x, P.y, P.z },
+							{ N.x, N.y, N.z },
+							mi->m_samples_radinfo[ i ].x, mi->m_samples_radinfo[ i ].y,
+							( LMX + 0.5f ) / mi->lm_width, ( LMY + 0.5f ) / mi->lm_height,
+							(uint32_t) mi->m_samples_radinfo[ i ].z, // should not be interpolated between triangles
+							mesh->m_ident.c_str(), mesh->m_ident.size(),
+							mi->m_ident.c_str(), mi->m_ident.size(),
+							{ 1, 1, 1 },
+							{ 0, 0, 0 },
+						};
+						if( config.sample_fn( &config, &REQ ) )
+						{
+							s_diff = Vec3::CreateFromPtr( REQ.out_diffuse_color );
+							s_emit += Vec3::CreateFromPtr( REQ.out_emissive_color );
+						}
+					}
+					
+					ltr_RadSampleColors RSC = { s_diff, s_emit, s_emit, Vec3::Create(0), s_area };
+					m_radSampleColors.push_back( RSC );
+				}
 			}
+			
+#ifdef LTRDEBUG
+			double t1 = ltr_gettime();
+			printf( "RAD sample concat: %g seconds\n", t1 - t0 );
+			
+			double t2 = ltr_gettime();
+#endif
+			
+			for( size_t i = 0; i < m_radSampleGeoms.size(); ++i )
+			{
+				m_radLinkMap.push_back( m_radLinks.size() ); // offset
+				m_radLinkMap.push_back( 0 ); // count
+				
+				const Vec3& A_SP = m_radSampleGeoms[ i ].pos;
+				const Vec3& A_SN = m_radSampleGeoms[ i ].normal;
+				for( size_t j = i + 1; j < m_radSampleGeoms.size(); ++j )
+				{
+					const Vec3& B_SP = m_radSampleGeoms[ j ].pos;
+					const Vec3& B_SN = m_radSampleGeoms[ j ].normal;
+					
+					Vec3 posdiff = B_SP - A_SP;
+					float dotA = Vec3Dot( A_SN, posdiff );
+					float dotB = Vec3Dot( B_SN, -posdiff );
+					if( dotA <= SMALL_FLOAT || dotB <= SMALL_FLOAT )
+						continue;
+					
+					float lensq = posdiff.LengthSq();
+					float factor = dotA * dotB / ( lensq * lensq * (float) M_PI );
+					if( factor < SMALL_FLOAT )
+						continue;
+					
+					if( VisibilityTest( A_SP, B_SP ) < 1.0f )
+						continue;
+					
+					// add sample
+					ltr_RadLink RL = { (uint32_t) j, factor };
+					m_radLinks.push_back( RL );
+					m_radLinkMap.back()++;
+				}
+			}
+			
+#ifdef LTRDEBUG
+			double t3 = ltr_gettime();
+			printf( "RAD sample processing: %g seconds\n", t3 - t2 );
+#endif
 		}
 		break;
 		
@@ -747,7 +761,9 @@ void ltr_Scene::DoWork()
 			ltr_Mesh* mesh = mi->mesh;
 			
 			float* image_rgb = new float[ mi->lm_width * mi->lm_height * 3 ];
+			char* image_set = new char[ mi->lm_width * mi->lm_height * 2 ];
 			TMEMSET( image_rgb, mi->lm_width * mi->lm_height * 3, 0.0f );
+			TMEMSET( image_set, mi->lm_width * mi->lm_height * 2, (char) 0 );
 			for( size_t i = 0; i < mi->m_samples_loc.size(); ++i )
 			{
 				size_t loc = mi->m_samples_loc[ i ] * 3;
@@ -755,7 +771,75 @@ void ltr_Scene::DoWork()
 				image_rgb[ loc+0 ] = LMC.x;
 				image_rgb[ loc+1 ] = LMC.y;
 				image_rgb[ loc+2 ] = LMC.z;
+				image_set[ mi->m_samples_loc[ i ] ] = 1;
 			}
+			
+			// extrapolate for interpolation
+			u32 w = mi->lm_width, h = mi->lm_height;
+#define PX_ISSET( x, y ) ( (x) < w && (y) < h && image_set[ (x) + (y) * w ] )
+#define PX_GETCOL( x, y ) Vec3::Create(image_rgb[((x)+(y)*w)*3+0],image_rgb[((x)+(y)*w)*3+1],image_rgb[((x)+(y)*w)*3+2])
+			for( int its = 1; its <= 3; ++its )
+			{
+				memcpy( image_set + w*h, image_set, w*h );
+				for( u32 y = 0; y < h; ++y )
+				{
+					for( u32 x = 0; x < w; ++x )
+					{
+						if( image_set[ x + y * w ] )
+							continue;
+						
+						Vec3 col = {0,0,0};
+						int count = 0;
+						// H
+						if( PX_ISSET( x-1, y ) )
+						{
+							if( PX_ISSET( x-2, y ) )
+								col += TLERP( PX_GETCOL( x-2, y ), PX_GETCOL( x-1, y ), 2.0f );
+							else
+								col += PX_GETCOL( x-1, y );
+							count++;
+						}
+						if( PX_ISSET( x+1, y ) )
+						{
+							if( PX_ISSET( x+2, y ) )
+								col += TLERP( PX_GETCOL( x+2, y ), PX_GETCOL( x+1, y ), 2.0f );
+							else
+								col += PX_GETCOL( x+1, y );
+							count++;
+						}
+						// V
+						if( PX_ISSET( x, y-1 ) )
+						{
+							if( PX_ISSET( x, y-2 ) )
+								col += TLERP( PX_GETCOL( x, y-2 ), PX_GETCOL( x, y-1 ), 2.0f );
+							else
+								col += PX_GETCOL( x, y-1 );
+							count++;
+						}
+						if( PX_ISSET( x, y+1 ) )
+						{
+							if( PX_ISSET( x, y+2 ) )
+								col += TLERP( PX_GETCOL( x, y+2 ), PX_GETCOL( x, y+1 ), 2.0f );
+							else
+								col += PX_GETCOL( x, y+1 );
+							count++;
+						}
+						
+						if( count )
+						{
+							col /= (float) count;
+							u32 off = ( x + y * w ) * 3;
+							image_rgb[ off+0 ] = TMAX( col.x, 0.0f );
+							image_rgb[ off+1 ] = TMAX( col.y, 0.0f );
+							image_rgb[ off+2 ] = TMAX( col.z, 0.0f );
+							image_set[ x + y * w + w*h ] = 1;
+						}
+					}
+				}
+				memcpy( image_set, image_set + w*h, w*h );
+			}
+#undef PX_ISSET
+#undef PX_GETCOL
 			
 			if( config.blur_size )
 			{
@@ -828,7 +912,7 @@ LTRCODE ltr_DoWork( ltr_Scene* scene, ltr_WorkInfo* info )
 	scene->DoWork();
 	
 	info->type = scene->m_workType;
-	info->part = scene->m_workPart;
+	info->part = scene->m_workPart + 1;
 	switch( scene->m_workType )
 	{
 	case LTR_WT_PREXFORM:
