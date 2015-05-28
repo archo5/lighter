@@ -455,7 +455,7 @@ void testfunc_rad1()
 }
 
 
-const char* testname = "rad1";
+const char* testname = "mesh2";
 
 int main( int argc, char* argv[] )
 {

@@ -381,45 +381,52 @@ void ltr_Scene::DoWork()
 		
 	case LTR_WT_COLINFO:
 		{
-			ltr_MeshInstance* mi = m_meshInstances[ m_workPart ];
-			if( mi->m_samplecont )
-				break;
-			if( !mi->m_shadow )
-				break;
-			ltr_Mesh* mesh = mi->mesh;
-			
-			for( u32 part = 0; part < mesh->m_parts.size(); ++part )
+			BSPTriVector tris;
+			for( size_t mi_id = 0; mi_id < m_meshInstances.size(); ++mi_id )
 			{
-				const ltr_MeshPart& mp = mesh->m_parts[ part ];
-				if( !mp.m_shadow )
+				ltr_MeshInstance* mi = m_meshInstances[ mi_id ];
+				if( mi->m_samplecont )
 					continue;
-				const Vec3* vertexBase = &mi->m_vpos[ mp.m_vertexOffset ];
-				const u32* indexBase = &mesh->m_indices[ mp.m_indexOffset ];
-				if( mp.m_tristrip )
+				if( !mi->m_shadow )
+					continue;
+				ltr_Mesh* mesh = mi->mesh;
+				
+				for( u32 part = 0; part < mesh->m_parts.size(); ++part )
 				{
-					for( u32 tri = 2; tri < mp.m_indexCount; ++tri )
+					const ltr_MeshPart& mp = mesh->m_parts[ part ];
+					if( !mp.m_shadow )
+						continue;
+					const Vec3* vertexBase = &mi->m_vpos[ mp.m_vertexOffset ];
+					const u32* indexBase = &mesh->m_indices[ mp.m_indexOffset ];
+					if( mp.m_tristrip )
 					{
-						u32 tridx1 = tri, tridx2 = tri + 1 + tri % 2, tridx3 = tri + 2 - tri % 2;
-						tridx1 = indexBase[ tridx1 ];
-						tridx2 = indexBase[ tridx2 ];
-						tridx3 = indexBase[ tridx3 ];
-						BSPTriangle T = { vertexBase[ tridx1 ], vertexBase[ tridx2 ], vertexBase[ tridx3 ] };
-						m_triTree.AddTriangle( &T );
+						for( u32 tri = 2; tri < mp.m_indexCount; ++tri )
+						{
+							u32 tridx1 = tri, tridx2 = tri + 1 + tri % 2, tridx3 = tri + 2 - tri % 2;
+							tridx1 = indexBase[ tridx1 ];
+							tridx2 = indexBase[ tridx2 ];
+							tridx3 = indexBase[ tridx3 ];
+							BSPTriangle T = { vertexBase[ tridx1 ], vertexBase[ tridx2 ], vertexBase[ tridx3 ] };
+							if( T.CheckIsUseful() )
+								tris.push_back( T );
+						}
 					}
-				}
-				else
-				{
-					for( u32 tri = 0; tri < mp.m_indexCount; tri += 3 )
+					else
 					{
-						u32 tridx1 = tri, tridx2 = tri + 1, tridx3 = tri + 2;
-						tridx1 = indexBase[ tridx1 ];
-						tridx2 = indexBase[ tridx2 ];
-						tridx3 = indexBase[ tridx3 ];
-						BSPTriangle T = { vertexBase[ tridx1 ], vertexBase[ tridx2 ], vertexBase[ tridx3 ] };
-						m_triTree.AddTriangle( &T );
+						for( u32 tri = 0; tri < mp.m_indexCount; tri += 3 )
+						{
+							u32 tridx1 = tri, tridx2 = tri + 1, tridx3 = tri + 2;
+							tridx1 = indexBase[ tridx1 ];
+							tridx2 = indexBase[ tridx2 ];
+							tridx3 = indexBase[ tridx3 ];
+							BSPTriangle T = { vertexBase[ tridx1 ], vertexBase[ tridx2 ], vertexBase[ tridx3 ] };
+							if( T.CheckIsUseful() )
+								tris.push_back( T );
+						}
 					}
 				}
 			}
+			m_triTree.SetTriangles( &tris[0], tris.size() );
 		}
 		break;
 		
@@ -1019,7 +1026,7 @@ LTRCODE ltr_Scene::Advance()
 	u32 count = m_meshInstances.size();
 	if( m_workType == LTR_WT_LMRENDER )
 		count *= m_lights.size();
-	if( m_workType == LTR_WT_RDGENLNK || m_workType == LTR_WT_RDCOMMIT )
+	if( m_workType == LTR_WT_COLINFO || m_workType == LTR_WT_RDGENLNK || m_workType == LTR_WT_RDCOMMIT )
 		count = 1;
 	if( m_workType == LTR_WT_RDBOUNCE )
 		count = config.bounce_count;
@@ -1060,7 +1067,7 @@ LTRCODE ltr_DoWork( ltr_Scene* scene, ltr_WorkInfo* info )
 		break;
 	case LTR_WT_COLINFO:
 		info->stage = "generating data structures";
-		info->item_count = scene->m_meshInstances.size();
+		info->item_count = 1;
 		break;
 	case LTR_WT_SAMPLES:
 		info->stage = "generating samples";

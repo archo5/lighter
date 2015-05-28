@@ -272,6 +272,7 @@ template< class T > void TMEMSET( T* a, size_t c, const T& v )
 	for( size_t i = 0; i < c; ++i )
 		a[ i ] = v;
 }
+template< class T > void TMEMCOPY( T* a, const T* src, size_t c ){ memcpy( a, src, c * sizeof(T) ); }
 template< class T, class S > T TLERP( const T& a, const T& b, const S& s ){ return a * ( S(1) - s ) + b * s; }
 
 
@@ -564,8 +565,7 @@ void Convolve_Transpose( float* src, float* dst, u32 width, u32 height, int blur
 
 
 // BSP tree
-// - the idea is to add triangles to node until space splitting becomes necessary
-// - when that happens, best split plane is chosen by triangle normals and general direction of vertex positions (longest projection)
+// - best split plane is chosen by triangle normals and general direction of vertex positions (longest projection)
 // - triangles are split to fit in the node
 
 struct BSPTriangle
@@ -589,8 +589,8 @@ struct BSPNode
 		if( back_node ) delete back_node;
 	}
 	
-	void AddTriangle( BSPTriangle* tri, int depth );
-	void AddTriangleSplit( BSPTriangle* tri, int depth );
+	void Split( int depth );
+	void AddTriangleSplit( BSPTriangle* tri );
 	float IntersectRay( const Vec3& from, const Vec3& to, Vec3* outnormal );
 	bool PickSplitPlane();
 	
@@ -625,7 +625,12 @@ struct BSPTree
 	BSPTree() : root( new BSPNode() ){}
 	~BSPTree(){ delete root; }
 	
-	FORCEINLINE void AddTriangle( BSPTriangle* tri ){ root->AddTriangle( tri, 0 ); }
+	FORCEINLINE void SetTriangles( BSPTriangle* tris, size_t count )
+	{
+		root->triangles.resize( count );
+		TMEMCOPY( &root->triangles[0], tris, count );
+		root->Split( 0 );
+	}
 	FORCEINLINE float IntersectRay( const Vec3& from, const Vec3& to, Vec3* outnormal = NULL ){ return root->IntersectRay( from, to, outnormal ); }
 	
 	BSPNode* root;

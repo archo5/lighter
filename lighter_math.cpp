@@ -399,37 +399,26 @@ void Convolve_Transpose( float* src, float* dst, u32 width, u32 height, int cone
 #define BSP_NO_HIT 2.0f
 #define BSP_MAX_NODE_COUNT 16
 #define BSP_MAX_NODE_DEPTH 32
-#define BSP_REEVAL_INTERVAL 8
 
-void BSPNode::AddTriangle( BSPTriangle* tri, int depth )
+void BSPNode::Split( int depth )
 {
-	if( !tri->CheckIsUseful() )
-		return;
-	
-	if( front_node ) // node already split
+	if( triangles.size() > BSP_MAX_NODE_COUNT &&
+		depth < BSP_MAX_NODE_DEPTH )
 	{
-		AddTriangleSplit( tri, depth + 1 );
-	}
-	else
-	{
-		triangles.push_back( *tri );
-		if( triangles.size() > BSP_MAX_NODE_COUNT &&
-			triangles.size() % BSP_REEVAL_INTERVAL == 0 &&
-			depth < BSP_MAX_NODE_DEPTH )
+		if( PickSplitPlane() )
 		{
-			if( PickSplitPlane() )
-			{
-				front_node = new BSPNode;
-				back_node = new BSPNode;
-				for( size_t i = 0; i < triangles.size(); ++i )
-					AddTriangleSplit( &triangles[i], depth + 1 );
-				BSPTriVector().swap( triangles );
-			}
+			front_node = new BSPNode;
+			back_node = new BSPNode;
+			for( size_t i = 0; i < triangles.size(); ++i )
+				AddTriangleSplit( &triangles[i] );
+			BSPTriVector().swap( triangles );
+			front_node->Split( depth + 1 );
+			back_node->Split( depth + 1 );
 		}
 	}
 }
 
-void BSPNode::AddTriangleSplit( BSPTriangle* tri, int depth )
+void BSPNode::AddTriangleSplit( BSPTriangle* tri )
 {
 	Vec3 P1 = tri->P1;
 	Vec3 P2 = tri->P2;
@@ -441,7 +430,7 @@ void BSPNode::AddTriangleSplit( BSPTriangle* tri, int depth )
 	float proj3 = Vec3Dot( N, P3 ) - D;
 	if( proj1 * proj2 >= -SMALL_FLOAT && proj1 * proj3 >= -SMALL_FLOAT )
 	{
-		( proj1 + proj2 + proj3 > 0 ? front_node : back_node )->AddTriangle( tri, depth );
+		( proj1 + proj2 + proj3 > 0 ? front_node : back_node )->triangles.push_back( *tri );
 		return;
 	}
 	
@@ -460,8 +449,8 @@ void BSPNode::AddTriangleSplit( BSPTriangle* tri, int depth )
 	if( wat++ > 100000 )
 		puts( "TODO FIX LEAK" );
 	
-	front_node->AddTriangle( tri, depth );
-	back_node->AddTriangle( tri, depth );
+	front_node->triangles.push_back( *tri );
+	back_node->triangles.push_back( *tri );
 }
 
 float BSPNode::IntersectRay( const Vec3& from, const Vec3& to, Vec3* outnormal )
