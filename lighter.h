@@ -84,6 +84,7 @@ typedef struct ltr_MeshPartInfo
 	u32 vertex_count;
 	u32 index_count;
 	int tristrip;
+	int shadow;
 }
 ltr_MeshPartInfo;
 
@@ -157,6 +158,7 @@ typedef struct ltr_Config
 		u32[2] /* out_width, out_height */
 	);
 	// limits & factors
+	int max_num_threads;
 	size_t max_tree_memory;
 	u32 max_lightmap_size;
 	u32 default_width;

@@ -12,11 +12,231 @@
 #include "lighter.h"
 
 
+#ifdef _WIN32
+
+#  define WIN32_LEAN_AND_MEAN
+#  undef _WIN32_WINNT
+#  define _WIN32_WINNT 0x0600
+#  undef WINVER
+#  define WINVER 0x0600
+#  include <windows.h>
+
+#  define ltrthread_sleep( ms ) Sleep( (DWORD) ms )
+
+#  define ltrmutex_t CRITICAL_SECTION
+#  define ltrthread_t HANDLE
+#  define threadret_t DWORD __stdcall
+#  define threadarg_t void*
+
+#  define ltrthread_create( toT, func, data ) toT = CreateThread( NULL, 1024, func, data, 0, NULL )
+#  define ltrthread_self() GetCurrentThread()
+#  define ltrthread_join( T ) for(;;){ WaitForMultipleObjects( 1, &T, TRUE, INFINITE ); CloseHandle( T ); break; }
+#  define ltrthread_equal( T1, T2 ) (T1 == T2)
+
+#  define ltrmutex_init( M ) InitializeCriticalSection( &M )
+#  define ltrmutex_destroy( M ) DeleteCriticalSection( &M )
+#  define ltrmutex_lock( M ) EnterCriticalSection( &M )
+#  define ltrmutex_unlock( M ) LeaveCriticalSection( &M )
+
+static int ltrnumcpus()
+{
+	SYSTEM_INFO sysinfo;
+	GetSystemInfo( &sysinfo );
+	return sysinfo.dwNumberOfProcessors;
+}
+
+
+#else
+
+#  include <unistd.h>
+#  include <pthread.h>
+
+static void ltrthread_sleep( uint32_t ms )
+{
+	if( ms >= 1000 )
+	{
+		sleep( ms / 1000 );
+		ms %= 1000;
+	}
+	if( ms > 0 )
+	{
+		usleep( ms * 1000 );
+	}
+}
+
+#  define ltrmutex_t pthread_mutex_t
+#  define ltrthread_t pthread_t
+#  define threadret_t void*
+#  define threadarg_t void*
+
+#  define ltrthread_create( toT, func, data ) pthread_create( &toT, NULL, func, data )
+#  define ltrthread_self() pthread_self()
+#  define ltrthread_join( T ) pthread_join( T, NULL )
+#  define ltrthread_equal( T1, T2 ) pthread_equal( T1, T2 )
+
+#  define ltrmutex_init( M ) pthread_mutex_init( &M, NULL )
+#  define ltrmutex_destroy( M ) pthread_mutex_destroy( &M )
+#  define ltrmutex_lock( M ) pthread_mutex_lock( &M )
+#  define ltrmutex_unlock( M ) pthread_mutex_unlock( &M )
+
+static int ltrnumcpus()
+{
+	return sysconf( _SC_NPROCESSORS_ONLN );
+}
+
+
+#endif
+
+
+#ifndef FORCEINLINE
 #ifdef _MSC_VER
 #define FORCEINLINE __forceinline
 #else
 #define FORCEINLINE inline __attribute__((__always_inline__))
 #endif
+#endif
+
+
+struct LTRMutex
+{
+	LTRMutex(){ ltrmutex_init( mutex ); }
+	~LTRMutex(){ ltrmutex_destroy( mutex ); }
+	void Lock(){ ltrmutex_lock( mutex ); }
+	void Unlock(){ ltrmutex_unlock( mutex ); }
+	void SleepCV( CONDITION_VARIABLE* cv ){ SleepConditionVariableCS( cv, &mutex, INFINITE ); }
+	ltrmutex_t mutex;
+};
+struct LTRMutexLock
+{
+	LTRMutexLock( LTRMutex& m ) : mutex( m ){ m.Lock(); }
+	~LTRMutexLock(){ mutex.Unlock(); }
+	LTRMutex& mutex;
+};
+
+struct LTRWorker
+{
+	struct IO
+	{
+		void* shared;
+		void* item;
+		size_t i;
+	};
+	typedef void (*WorkProc) (IO*);
+	
+	LTRWorker() :
+		m_shared( NULL ),
+		m_items( NULL ),
+		m_itemSize( 0 ),
+		m_itemCount( 0 ),
+		m_nextItem( 0 ),
+		m_numDone( 0 ),
+		m_workProc( NULL ),
+		m_exit( false )
+	{
+		InitializeConditionVariable( &m_hasWork );
+		InitializeConditionVariable( &m_hasDone );
+	}
+	~LTRWorker()
+	{
+		m_exit = true;
+		WakeAllConditionVariable( &m_hasWork );
+		for( size_t i = 0; i < m_threads.size(); ++i )
+		{
+			ltrthread_join( m_threads[ i ] );
+		}
+	}
+	void Init( int nt = ltrnumcpus() )
+	{
+		if( m_threads.size() )
+			return;
+		m_threads.resize( nt );
+		for( int i = 0; i < nt; ++i )
+		{
+			ltrthread_create( m_threads[ i ], threadproc, this );
+		}
+	}
+	
+	void DoWork( void* shared, void* items, size_t size, size_t count, WorkProc wp )
+	{
+		m_mutex.Lock();
+		
+		m_shared = shared;
+		m_items = (char*) items;
+		m_itemSize = size;
+		m_itemCount = count;
+		m_nextItem = 0;
+		m_numDone = 0;
+		m_workProc = wp;
+		
+		m_mutex.Unlock();
+		WakeAllConditionVariable( &m_hasWork );
+		m_mutex.Lock();
+		
+		while( m_numDone < m_itemCount )
+		{
+			m_mutex.SleepCV( &m_hasDone );
+		}
+		
+		m_shared = NULL;
+		m_items = NULL;
+		m_itemSize = 0;
+		m_itemCount = 0;
+		m_nextItem = 0;
+		m_numDone = 0;
+		m_workProc = NULL;
+		
+		m_mutex.Unlock();
+	}
+	
+	void IntProcess()
+	{
+		m_mutex.Lock();
+		while( !m_exit )
+		{
+			if( m_nextItem < m_itemCount )
+			{
+				size_t myitem = m_nextItem++;
+				m_mutex.Unlock();
+				
+				IO io = { m_shared, m_items + myitem * m_itemSize, myitem };
+				m_workProc( &io );
+				
+				m_mutex.Lock();
+				m_numDone++;
+				if( m_numDone < m_itemCount )
+					continue; // there may be more work
+			}
+			
+			m_mutex.Unlock();
+			WakeAllConditionVariable( &m_hasDone );
+			m_mutex.Lock();
+			
+			m_mutex.SleepCV( &m_hasWork );
+		}
+		m_mutex.Unlock();
+	}
+	
+	static threadret_t threadproc( threadarg_t arg )
+	{
+		LTRWorker* w = (LTRWorker*) arg;
+		w->IntProcess();
+		return 0;
+	}
+	
+	void* m_shared;
+	char* m_items;
+	size_t m_itemSize;
+	size_t m_itemCount;
+	size_t m_nextItem;
+	size_t m_numDone;
+	WorkProc m_workProc;
+	
+	std::vector< ltrthread_t > m_threads;
+	LTRMutex m_mutex;
+	volatile bool m_exit;
+	CONDITION_VARIABLE m_hasWork;
+	CONDITION_VARIABLE m_hasDone;
+};
 
 
 #define SMALL_FLOAT 0.001f

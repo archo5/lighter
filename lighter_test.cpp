@@ -9,6 +9,8 @@
 
 #define LTR_VERIFY( x ) printf( "VERIFY: %s : %d\n", #x, x )
 
+template< typename T > T safe_div( T a, T b ){ return b == T(0) ? T(0) : a / b; }
+
 
 struct testmesh
 {
@@ -149,7 +151,7 @@ void testfunc_basic()
 	{
 		m1_p1_positions, m1_p1_normals, m1_p1_texcoords, m1_p1_texcoords,
 		sizeof(float)*3, sizeof(float)*3, sizeof(float)*2, sizeof(float)*2,
-		m1_p1_indices, 4, 6, 0
+		m1_p1_indices, 4, 6, 0, 1
 	};
 	LTR_VERIFY( ltr_MeshAddPart( mesh1, &m1part1 ) );
 	
@@ -194,7 +196,7 @@ void testfunc_basic()
 	while( ltr_DoWork( scene, &winfo ) == 0 )
 	{
 		printf( "%s [%d/%d] ... %d%%\n", winfo.stage, (int) winfo.part,
-			(int) winfo.item_count, (int) ( winfo.part * 100 / winfo.item_count ) );
+			(int) winfo.item_count, (int) safe_div( winfo.part * 100, winfo.item_count ) );
 	}
 	
 	// --- RETURN OUTPUT ---
@@ -233,7 +235,7 @@ void testfunc_mesh1()
 	{
 		&M.positions[0], &M.normals[0], &M.texcoords[0], &M.texcoords[0],
 		sizeof(float)*3, sizeof(float)*3, sizeof(float)*2, sizeof(float)*2,
-		&M.indices[0], (u32) M.positions.size(), (u32) M.indices.size(), 0
+		&M.indices[0], (u32) M.positions.size(), (u32) M.indices.size(), 0, 1
 	};
 	LTR_VERIFY( ltr_MeshAddPart( mesh1, &m1part1 ) );
 	
@@ -301,7 +303,7 @@ void testfunc_mesh2()
 	{
 		&M.positions[0], &M.normals[0], &M.texcoords[0], &M.texcoords[0],
 		sizeof(float)*3, sizeof(float)*3, sizeof(float)*2, sizeof(float)*2,
-		&M.indices[0], (u32) M.positions.size(), (u32) M.indices.size(), 0
+		&M.indices[0], (u32) M.positions.size(), (u32) M.indices.size(), 0, 1
 	};
 	LTR_VERIFY( ltr_MeshAddPart( mesh1, &m1part1 ) );
 	
@@ -324,7 +326,7 @@ void testfunc_mesh2()
 	{
 		&M2.positions[0], &M2.normals[0], &M2.texcoords[0], &M2.texcoords[0],
 		sizeof(float)*3, sizeof(float)*3, sizeof(float)*2, sizeof(float)*2,
-		&M2.indices[0], (u32) M2.positions.size(), (u32) M2.indices.size(), 0
+		&M2.indices[0], (u32) M2.positions.size(), (u32) M2.indices.size(), 0, 1
 	};
 	LTR_VERIFY( ltr_MeshAddPart( mesh2, &m2part1 ) );
 	
@@ -343,7 +345,7 @@ void testfunc_mesh2()
 		{ LTR_LT_POINT, { -2.18f, -4.04f, 1.40f }, {0,0,0}, {0,0,0}, { 0.9f, 0.7f, 0.5f }, 16.0f, 1.0f, 0.1f, 5,  0, 0, 0 },
 		{ LTR_LT_POINT, { 2.18f, 4.04f, 1.40f }, {0,0,0}, {0,0,0}, { 0.5f, 0.7f, 0.9f }, 16.0f, 1.0f, 0.1f, 5,  0, 0, 0 },
 		{ LTR_LT_SPOT, { 0, 0, 1.60f }, {0,0,-1}, {1,0,0}, { 0.7f, 0.1f, 0.05f }, 16.0f, 1.0f, 0.1f, 5, 45.0f, 25.0f, 0.5f },
-		{ LTR_LT_DIRECT, {0,0,0}, { -1, -1, -1 }, {0,0,0}, { 0.6f, 0.55f, 0.5f }, 1000.0f, 1.0f, 0.0f, 1,  0, 0, 0 },
+		{ LTR_LT_DIRECT, {0,0,0}, { 1, 1, 1 }, {0,0,0}, { 0.6f, 0.55f, 0.5f }, 1000.0f, 1.0f, 0.0f, 1,  0, 0, 0 },
 	};
 	for( size_t lt = 0; lt < sizeof(lights)/sizeof(lights[0]); ++lt )
 		ltr_LightAdd( scene, &lights[ lt ] );
@@ -406,7 +408,7 @@ void testfunc_rad1()
 	{
 		&M.positions[0], &M.normals[0], &M.texcoords[0], &M.texcoords[0],
 		sizeof(float)*3, sizeof(float)*3, sizeof(float)*2, sizeof(float)*2,
-		&M.indices[0], (u32) M.positions.size(), (u32) M.indices.size(), 0
+		&M.indices[0], (u32) M.positions.size(), (u32) M.indices.size(), 0, 1
 	};
 	LTR_VERIFY( ltr_MeshAddPart( mesh1, &m1part1 ) );
 	
@@ -470,4 +472,6 @@ int main( int argc, char* argv[] )
 		testfunc_rad1();
 	else
 		printf( "TEST NOT FOUND: %s\n", testname );
+	
+	return 0;
 }
