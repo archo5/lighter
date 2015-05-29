@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "lighter.h"
 #include "lighter_int.hpp"
@@ -10,6 +11,18 @@
 #define LTR_VERIFY( x ) printf( "VERIFY: %s : %d\n", #x, x )
 
 template< typename T > T safe_div( T a, T b ){ return b == T(0) ? T(0) : a / b; }
+
+double ltr_gettime()
+{
+#ifdef __linux
+	struct timespec ts;
+	clock_gettime( CLOCK_MONOTONIC, &ts );
+	return (double) ts.tv_sec + 0.000000001 * (double) ts.tv_nsec;
+#else
+	clock_t clk = clock();
+	return (double)( clk ) / (double)( CLOCKS_PER_SEC );
+#endif
+}
 
 
 struct testmesh
@@ -260,11 +273,14 @@ void testfunc_mesh1()
 	
 	// --- DO WORK ---
 	ltr_WorkInfo winfo;
+	double ta = ltr_gettime();
 	while( ltr_DoWork( scene, &winfo ) == 0 )
 	{
 		printf( "%s [%d/%d] ... %d%%\n", winfo.stage, (int) winfo.part,
 			(int) winfo.item_count, (int) ( winfo.item_count ? winfo.part * 100 / winfo.item_count : 0 ) );
 	}
+	double tb = ltr_gettime();
+	printf( "time taken: %f\n", (tb-ta) );
 	
 	// --- RETURN OUTPUT ---
 	ltr_WorkOutput wout;
@@ -352,11 +368,14 @@ void testfunc_mesh2()
 	
 	// --- DO WORK ---
 	ltr_WorkInfo winfo;
+	double ta = ltr_gettime();
 	while( ltr_DoWork( scene, &winfo ) == 0 )
 	{
 		printf( "%s [%d/%d] ... %d%%\n", winfo.stage, (int) winfo.part,
 			(int) winfo.item_count, (int) ( winfo.item_count ? winfo.part * 100 / winfo.item_count : 0 ) );
 	}
+	double tb = ltr_gettime();
+	printf( "time taken: %f\n", (tb-ta) );
 	
 	// --- RETURN OUTPUT ---
 	ltr_WorkOutput wout;
@@ -433,11 +452,14 @@ void testfunc_rad1()
 	
 	// --- DO WORK ---
 	ltr_WorkInfo winfo;
+	double ta = ltr_gettime();
 	while( ltr_DoWork( scene, &winfo ) == 0 )
 	{
 		printf( "%s [%d/%d] ... %d%%\n", winfo.stage, (int) winfo.part,
 			(int) winfo.item_count, (int) ( winfo.item_count ? winfo.part * 100 / winfo.item_count : 0 ) );
 	}
+	double tb = ltr_gettime();
+	printf( "time taken: %f\n", (tb-ta) );
 	
 	// --- RETURN OUTPUT ---
 	ltr_WorkOutput wout;

@@ -498,33 +498,54 @@ float BSPNode::IntersectRay( const Vec3& from, const Vec3& to, Vec3* outnormal )
 	}
 }
 
+template< typename T > void TFINDADD( std::vector<T>& vec, const T& v )
+{
+	size_t at = 0;
+	for( ; at < vec.size(); ++at )
+	{
+		if( vec[ at ] == v )
+			break;
+	}
+	if( at == vec.size() )
+		vec.push_back( v );
+}
+
 bool BSPNode::PickSplitPlane()
 {
-	// split direction by positions / normals
-	float mult = 1.0f / triangles.size();
-	float mult3 = mult / 3.0f;
-	Vec3 PN = {0,0,0}, NN = {0,0,0};
+	Vec3Vector points;
 	for( size_t i = 0; i < triangles.size(); ++i )
 	{
 		BSPTriangle& T = triangles[i];
-		Vec3 ND1 = ( T.P2 - T.P1 ) * mult3;
-		Vec3 ND2 = ( T.P3 - T.P2 ) * mult3;
-		Vec3 ND3 = ( T.P1 - T.P3 ) * mult3;
-		Vec3 NNRM = Vec3Cross( ND1, ND3 ).Normalized();
-		PN += Vec3Dot( PN, ND1 ) < 0 ? -ND1 : ND1;
-		PN += Vec3Dot( PN, ND2 ) < 0 ? -ND2 : ND2;
-		PN += Vec3Dot( PN, ND3 ) < 0 ? -ND3 : ND3;
-		NN += Vec3Dot( NN, NNRM ) < 0 ? -NNRM : NNRM;
+		TFINDADD( points, T.P1 );
+		TFINDADD( points, T.P2 );
+		TFINDADD( points, T.P3 );
 	}
-	N = ( PN.Normalized() * 0.5f + NN.Normalized() * 0.5f ).Normalized();
 	
-	float dsum = 0;
-	for( size_t i = 0; i < triangles.size(); ++i )
+	// find longest direction and center
+	Vec3 center = {0,0,0};
+	Vec3 curdir = {0,0,0};
+	float curlen = 0;
+	
+	for( size_t i = 0; i < points.size(); ++i )
 	{
-		BSPTriangle& T = triangles[i];
-		dsum += Vec3Dot( T.P1, N ) + Vec3Dot( T.P2, N ) + Vec3Dot( T.P3, N );
+		center += points[i];
+		for( size_t j = i + 1; j < points.size(); ++j )
+		{
+			Vec3 newdir = points[j] - points[i];
+			float newlen = newdir.LengthSq();
+			if( newlen > curlen )
+			{
+				curdir = newdir;
+				curlen = newlen;
+			}
+		}
 	}
-	D = dsum * mult3;
+	if( points.size() )
+		center /= points.size();
+	
+	// find centers at both sides of plane
+	N = curdir.Normalized();
+	D = Vec3Dot( N, center );
 	
 	// evaluate viability of splitting
 	int numA = 0;
