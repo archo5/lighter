@@ -541,7 +541,7 @@ bool BSPNode::PickSplitPlane()
 		}
 	}
 	if( points.size() )
-		center /= points.size();
+		center /= (float) points.size();
 	
 	// find centers at both sides of plane
 	N = curdir.Normalized();

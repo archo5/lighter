@@ -860,7 +860,7 @@ void ltr_Scene::DoWork_LMRender_Inner_Direct( size_t i, dw_lmrender_data* data )
 		for( int s = 0; s < light.shadow_sample_count; ++s )
 		{
 			Vec3 adjdir = Vec3::CreateSpiralDirVector( -light.direction, randoff, s, light.shadow_sample_count );
-			adjdir = ( adjdir + (-light.direction) * tan( ( light.light_radius - 0.5f ) * M_PI * 0.999f ) ).Normalized();
+			adjdir = ( adjdir + (-light.direction) * tan( ( light.light_radius - 0.5f ) * float(M_PI) * 0.999f ) ).Normalized();
 			
 			f_ndotl += TMAX( 0.0f, Vec3Dot( adjdir, SN ) );
 			float hit = VisibilityTest( ray_origin, ray_origin + adjdir * light.range );
@@ -1241,7 +1241,7 @@ void ltr_LightAdd( ltr_Scene* scene, ltr_LightInfo* li )
 		{
 		//	Vec3 adjdir = Vec3::CreateRandomVectorDirDvg( -L.direction, L.light_radius );
 			Vec3 adjdir = Vec3::CreateSpiralDirVector( -L.direction, randoff, s, L.shadow_sample_count );
-			adjdir = ( adjdir + (-L.direction) * tan( ( L.light_radius - 0.5f ) * M_PI * 0.999f ) ).Normalized();
+			adjdir = ( adjdir + (-L.direction) * tan( ( L.light_radius - 0.5f ) * float(M_PI) * 0.999f ) ).Normalized();
 			
 			L.samples.push_back( adjdir );
 		}

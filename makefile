@@ -1,5 +1,5 @@
 
-CFLAGS = -Wall -fno-exceptions -fno-rtti -static-libgcc -static-libstdc++ -DLTRBUILD -g -DLTRDEBUG -m32
+CFLAGS = -Wall -fno-exceptions -fno-rtti -static-libgcc -static-libstdc++ -DLTRBUILD -g -DLTRDEBUG -m32 -O1
 
 bin/lighter_test.exe: lighter_test.cpp lighter.h bin/lighter.dll
 	$(CXX) -o $@ lighter_test.cpp $(CFLAGS) bin/lighter.dll
