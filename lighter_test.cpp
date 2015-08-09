@@ -12,7 +12,7 @@
 
 template< typename T > T safe_div( T a, T b ){ return b == T(0) ? T(0) : a / b; }
 
-double ltr_gettime()
+static double ltr_curtime()
 {
 #ifdef __linux
 	struct timespec ts;
@@ -146,6 +146,22 @@ void dumpimg( const char* file, float* img_rgb, u32 width, u32 height, float top
 }
 
 
+void DOWORK( ltr_Scene* scene )
+{
+	ltr_WorkStatus wstatus;
+	double ta = ltr_curtime();
+	ltr_Start( scene );
+	printf( "\n" );
+	while( ltr_GetStatus( scene, &wstatus ) )
+	{
+		printf( "\r%s ... %d%%", wstatus.stage, int(wstatus.completion * 100) );
+		ltr_Sleep( 50 );
+	}
+	double tb = ltr_curtime();
+	printf( "\n\ntime taken: %f\n", (tb-ta) );
+}
+
+
 void testfunc_basic()
 {
 	puts( "LIGHTER test [basic]" );
@@ -164,7 +180,7 @@ void testfunc_basic()
 	{
 		m1_p1_positions, m1_p1_normals, m1_p1_texcoords, m1_p1_texcoords,
 		sizeof(float)*3, sizeof(float)*3, sizeof(float)*2, sizeof(float)*2,
-		m1_p1_indices, 4, 6, 0, 1
+		m1_p1_indices, 4, 6, 1
 	};
 	LTR_VERIFY( ltr_MeshAddPart( mesh1, &m1part1 ) );
 	
@@ -205,12 +221,7 @@ void testfunc_basic()
 		ltr_LightAdd( scene, &lights[ lt ] );
 	
 	// --- DO WORK ---
-	ltr_WorkInfo winfo;
-	while( ltr_DoWork( scene, &winfo ) == 0 )
-	{
-		printf( "%s [%d/%d] ... %d%%\n", winfo.stage, (int) winfo.part,
-			(int) winfo.item_count, (int) safe_div( winfo.part * 100, winfo.item_count ) );
-	}
+	DOWORK( scene );
 	
 	// --- RETURN OUTPUT ---
 	ltr_WorkOutput wout;
@@ -248,7 +259,7 @@ void testfunc_mesh1()
 	{
 		&M.positions[0], &M.normals[0], &M.texcoords[0], &M.texcoords[0],
 		sizeof(float)*3, sizeof(float)*3, sizeof(float)*2, sizeof(float)*2,
-		&M.indices[0], (u32) M.positions.size(), (u32) M.indices.size(), 0, 1
+		&M.indices[0], (u32) M.positions.size(), (u32) M.indices.size(), 1
 	};
 	LTR_VERIFY( ltr_MeshAddPart( mesh1, &m1part1 ) );
 	
@@ -272,15 +283,7 @@ void testfunc_mesh1()
 		ltr_LightAdd( scene, &lights[ lt ] );
 	
 	// --- DO WORK ---
-	ltr_WorkInfo winfo;
-	double ta = ltr_gettime();
-	while( ltr_DoWork( scene, &winfo ) == 0 )
-	{
-		printf( "%s [%d/%d] ... %d%%\n", winfo.stage, (int) winfo.part,
-			(int) winfo.item_count, (int) ( winfo.item_count ? winfo.part * 100 / winfo.item_count : 0 ) );
-	}
-	double tb = ltr_gettime();
-	printf( "time taken: %f\n", (tb-ta) );
+	DOWORK( scene );
 	
 	// --- RETURN OUTPUT ---
 	ltr_WorkOutput wout;
@@ -306,7 +309,9 @@ void testfunc_mesh2()
 	ltr_Config cfg;
 	ltr_GetConfig( &cfg, scene );
 	cfg.ao_distance = 2;
-	cfg.global_size_factor = 2;
+	cfg.global_size_factor = 4;
+	cfg.blur_size = 0;
+	cfg.ds2x = 1;
 	ltr_SetConfig( scene, &cfg );
 	
 	// MESH 1
@@ -319,7 +324,7 @@ void testfunc_mesh2()
 	{
 		&M.positions[0], &M.normals[0], &M.texcoords[0], &M.texcoords[0],
 		sizeof(float)*3, sizeof(float)*3, sizeof(float)*2, sizeof(float)*2,
-		&M.indices[0], (u32) M.positions.size(), (u32) M.indices.size(), 0, 1
+		&M.indices[0], (u32) M.positions.size(), (u32) M.indices.size(), 1
 	};
 	LTR_VERIFY( ltr_MeshAddPart( mesh1, &m1part1 ) );
 	
@@ -342,7 +347,7 @@ void testfunc_mesh2()
 	{
 		&M2.positions[0], &M2.normals[0], &M2.texcoords[0], &M2.texcoords[0],
 		sizeof(float)*3, sizeof(float)*3, sizeof(float)*2, sizeof(float)*2,
-		&M2.indices[0], (u32) M2.positions.size(), (u32) M2.indices.size(), 0, 1
+		&M2.indices[0], (u32) M2.positions.size(), (u32) M2.indices.size(), 1
 	};
 	LTR_VERIFY( ltr_MeshAddPart( mesh2, &m2part1 ) );
 	
@@ -367,15 +372,7 @@ void testfunc_mesh2()
 		ltr_LightAdd( scene, &lights[ lt ] );
 	
 	// --- DO WORK ---
-	ltr_WorkInfo winfo;
-	double ta = ltr_gettime();
-	while( ltr_DoWork( scene, &winfo ) == 0 )
-	{
-		printf( "%s [%d/%d] ... %d%%\n", winfo.stage, (int) winfo.part,
-			(int) winfo.item_count, (int) ( winfo.item_count ? winfo.part * 100 / winfo.item_count : 0 ) );
-	}
-	double tb = ltr_gettime();
-	printf( "time taken: %f\n", (tb-ta) );
+	DOWORK( scene );
 	
 	// --- RETURN OUTPUT ---
 	ltr_WorkOutput wout;
@@ -427,7 +424,7 @@ void testfunc_rad1()
 	{
 		&M.positions[0], &M.normals[0], &M.texcoords[0], &M.texcoords[0],
 		sizeof(float)*3, sizeof(float)*3, sizeof(float)*2, sizeof(float)*2,
-		&M.indices[0], (u32) M.positions.size(), (u32) M.indices.size(), 0, 1
+		&M.indices[0], (u32) M.positions.size(), (u32) M.indices.size(), 1
 	};
 	LTR_VERIFY( ltr_MeshAddPart( mesh1, &m1part1 ) );
 	
@@ -451,15 +448,7 @@ void testfunc_rad1()
 		ltr_LightAdd( scene, &lights[ lt ] );
 	
 	// --- DO WORK ---
-	ltr_WorkInfo winfo;
-	double ta = ltr_gettime();
-	while( ltr_DoWork( scene, &winfo ) == 0 )
-	{
-		printf( "%s [%d/%d] ... %d%%\n", winfo.stage, (int) winfo.part,
-			(int) winfo.item_count, (int) ( winfo.item_count ? winfo.part * 100 / winfo.item_count : 0 ) );
-	}
-	double tb = ltr_gettime();
-	printf( "time taken: %f\n", (tb-ta) );
+	DOWORK( scene );
 	
 	// --- RETURN OUTPUT ---
 	ltr_WorkOutput wout;

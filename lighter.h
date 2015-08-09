@@ -61,15 +61,6 @@ typedef ltr_VEC4 ltr_MAT4[4];
 #define LTR_LT_DIRECT 3
 
 
-typedef struct ltr_WorkInfo
-{
-	i32 type;
-	i32 part;
-	const char* stage;
-	i32 item_count;
-}
-ltr_WorkInfo;
-
 typedef struct ltr_MeshPartInfo
 {
 	const void* positions_f3;
@@ -83,7 +74,6 @@ typedef struct ltr_MeshPartInfo
 	const u32* indices;
 	u32 vertex_count;
 	u32 index_count;
-	int tristrip;
 	int shadow;
 }
 ltr_MeshPartInfo;
@@ -191,6 +181,8 @@ typedef struct ltr_Config
 	int ao_num_samples;
 	// GAUSSIAN BLUR effect:
 	float blur_size;
+	// DOWNSAMPLE 2X effect:
+	int ds2x;
 }
 ltr_Config;
 
@@ -230,11 +222,21 @@ ltr_WorkOutput;
 typedef struct ltr_Mesh ltr_Mesh;
 typedef struct ltr_Scene ltr_Scene;
 
+typedef struct ltr_WorkStatus
+{
+	float completion;
+	const char* stage;
+}
+ltr_WorkStatus;
+
 
 // - manage scene
 LTRAPI ltr_Scene* ltr_CreateScene();
 LTRAPI void ltr_DestroyScene( ltr_Scene* scene );
-LTRAPI LTRCODE ltr_DoWork( ltr_Scene* scene, ltr_WorkInfo* info );
+LTRAPI void ltr_Start( ltr_Scene* scene );
+LTRAPI void ltr_Abort( ltr_Scene* scene );
+LTRAPI LTRBOOL ltr_GetStatus( ltr_Scene* scene, ltr_WorkStatus* wsout );
+LTRAPI void ltr_Sleep( int ms );
 LTRAPI void ltr_GetConfig( ltr_Config* cfg, ltr_Scene* opt_scene );
 LTRAPI LTRCODE ltr_SetConfig( ltr_Scene* scene, ltr_Config* cfg );
 

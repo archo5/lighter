@@ -8,6 +8,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "lighter_test", "lighter_tes
 		{349BFF68-20BC-4BA3-BEA1-2B66AC236C5D} = {349BFF68-20BC-4BA3-BEA1-2B66AC236C5D}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "lighter_test_static", "lighter_test_static.vcxproj", "{0E148F47-8AD0-4734-9F7B-8DCAF8A3F971}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -22,6 +24,10 @@ Global
 		{5159759C-57E9-462C-B901-7AEF8A2B2ADC}.Debug|Win32.Build.0 = Debug|Win32
 		{5159759C-57E9-462C-B901-7AEF8A2B2ADC}.Release|Win32.ActiveCfg = Release|Win32
 		{5159759C-57E9-462C-B901-7AEF8A2B2ADC}.Release|Win32.Build.0 = Release|Win32
+		{0E148F47-8AD0-4734-9F7B-8DCAF8A3F971}.Debug|Win32.ActiveCfg = Debug|Win32
+		{0E148F47-8AD0-4734-9F7B-8DCAF8A3F971}.Debug|Win32.Build.0 = Debug|Win32
+		{0E148F47-8AD0-4734-9F7B-8DCAF8A3F971}.Release|Win32.ActiveCfg = Release|Win32
+		{0E148F47-8AD0-4734-9F7B-8DCAF8A3F971}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

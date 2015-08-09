@@ -6,8 +6,10 @@
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
+#include <float.h>
 #include <vector>
 #include <string>
+#include <algorithm>
 
 #include "lighter.h"
 
@@ -156,20 +158,8 @@ struct LTRWorker
 		}
 	}
 	
-	void DoWork( void* shared, void* items, size_t size, size_t count, WorkProc wp )
+	void WaitForEnd()
 	{
-		m_mutex.Lock();
-		
-		m_shared = shared;
-		m_items = (char*) items;
-		m_itemSize = size;
-		m_itemCount = count;
-		m_nextItem = 0;
-		m_numDone = 0;
-		m_workProc = wp;
-		
-		m_mutex.Unlock();
-		WakeAllConditionVariable( &m_hasWork );
 		m_mutex.Lock();
 		
 		while( m_numDone < m_itemCount )
@@ -186,6 +176,23 @@ struct LTRWorker
 		m_workProc = NULL;
 		
 		m_mutex.Unlock();
+	}
+	void DoWork( void* shared, void* items, size_t size, size_t count, WorkProc wp, bool stay = true )
+	{
+		m_mutex.Lock();
+		
+		m_shared = shared;
+		m_items = (char*) items;
+		m_itemSize = size;
+		m_itemCount = count;
+		m_nextItem = 0;
+		m_numDone = 0;
+		m_workProc = wp;
+		
+		m_mutex.Unlock();
+		WakeAllConditionVariable( &m_hasWork );
+		if( stay )
+			WaitForEnd();
 	}
 	
 	void IntProcess()
@@ -249,18 +256,8 @@ struct LTRWorker
 #endif
 
 
-#define LTR_WT_PREXFORM 0 // transform positions/normals for instances
-#define LTR_WT_COLINFO  1 // generate collision info (* mesh)
-#define LTR_WT_SAMPLES  2 // gather sampled information to compact position/normal/index arrays, allocate color arrays (* mesh)
-#define LTR_WT_LMRENDER 3 // generate colors for samples by rendering lights to lightmaps (* mesh * light)
-#define LTR_WT_RDGENLNK 4 // calculate sample links
-#define LTR_WT_RDBOUNCE 5 // calculate a bounce between samples
-#define LTR_WT_RDCOMMIT 6 // commit radiosity calculations
-#define LTR_WT_AORENDER 7 // generate ambient occlusion for samples (* mesh)
-#define LTR_WT_FINALIZE 8 // push sample data back to lightmaps (* mesh)
-
-
 FORCEINLINE float randf(){ return (float) rand() / (float) RAND_MAX; }
+FORCEINLINE float safe_fdiv( float x, float d ){ return d ? x / d : 0; }
 
 double ltr_gettime();
 
@@ -274,6 +271,7 @@ template< class T > void TMEMSET( T* a, size_t c, const T& v )
 }
 template< class T > void TMEMCOPY( T* a, const T* src, size_t c ){ memcpy( a, src, c * sizeof(T) ); }
 template< class T, class S > T TLERP( const T& a, const T& b, const S& s ){ return a * ( S(1) - s ) + b * s; }
+template< class T > typename T::value_type* VDATA( T& vec, size_t at = 0 ){ return ( vec.size() ? &vec[0] : (typename T::value_type*) NULL ) + at; }
 
 
 struct Vec2
@@ -356,6 +354,8 @@ struct Vec3
 	}
 	static FORCEINLINE Vec3 CreateRandomVectorDirDvg( const Vec3& dir, float dvg );
 	static FORCEINLINE Vec3 CreateSpiralDirVector( const Vec3& dir, float randoff, int i, int sample_count );
+	static FORCEINLINE Vec3 Min( const Vec3& a, const Vec3& b ){ return Create( TMIN( a.x, b.x ), TMIN( a.y, b.y ), TMIN( a.z, b.z ) ); }
+	static FORCEINLINE Vec3 Max( const Vec3& a, const Vec3& b ){ return Create( TMAX( a.x, b.x ), TMAX( a.y, b.y ), TMAX( a.z, b.z ) ); }
 	
 	FORCEINLINE Vec3 operator + () const { return *this; }
 	FORCEINLINE Vec3 operator - () const { Vec3 v = { -x, -y, -z }; return v; }
@@ -410,6 +410,10 @@ FORCEINLINE Vec3 operator + ( float f, const Vec3& v ){ Vec3 out = { f + v.x, f 
 FORCEINLINE Vec3 operator - ( float f, const Vec3& v ){ Vec3 out = { f - v.x, f - v.y, f - v.z }; return out; }
 FORCEINLINE Vec3 operator * ( float f, const Vec3& v ){ Vec3 out = { f * v.x, f * v.y, f * v.z }; return out; }
 FORCEINLINE Vec3 operator / ( float f, const Vec3& v ){ Vec3 out = { f / v.x, f / v.y, f / v.z }; return out; }
+
+static FORCEINLINE Vec3 V3( float x ){ Vec3 o = { x, x, x }; return o; }
+static FORCEINLINE Vec3 V3( float x, float y, float z ){ Vec3 o = { x, y, z }; return o; }
+static FORCEINLINE Vec3 V3P( const float* x ){ Vec3 o = { x[0], x[1], x[2] }; return o; }
 
 FORCEINLINE float Vec3Dot( const Vec3& v1, const Vec3& v2 ){ return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z; }
 FORCEINLINE Vec3 Vec3Cross( const Vec3& v1, const Vec3& v2 )
@@ -562,13 +566,24 @@ void RasterizeTriangle2D_x2_ex( Vec3* img1, Vec3* img2, Vec4* img3, i32 width, i
 
 void Generate_Gaussian_Kernel( float* out, int ext, float radius );
 void Convolve_Transpose( float* src, float* dst, u32 width, u32 height, int blur_ext, float* kernel, float* tmp );
+void Downsample2X( float* dst, unsigned dstW, unsigned dstH, float* src, unsigned srcW, unsigned srcH );
 
 
 // BSP tree
 // - best split plane is chosen by triangle normals and general direction of vertex positions (longest projection)
 // - triangles are split to fit in the node
 
-struct BSPTriangle
+struct AABB3
+{
+	Vec3 bbmin;
+	Vec3 bbmax;
+	
+	FORCEINLINE bool Valid() const { return bbmin.x <= bbmax.x && bbmin.y <= bbmax.y && bbmin.z <= bbmax.z; }
+	FORCEINLINE Vec3 Center() const { return ( bbmin + bbmax ) * 0.5f; }
+	FORCEINLINE float Volume() const { return ( bbmax.x - bbmin.x ) * ( bbmax.y - bbmin.y ) * ( bbmax.z - bbmin.z ); }
+};
+
+struct Triangle
 {
 	Vec3 P1, P2, P3;
 	
@@ -577,8 +592,19 @@ struct BSPTriangle
 		Vec3 e1 = P2 - P1, e2 = P3 - P1;
 		return !Vec3Cross( e1, e2 ).NearZero();
 	}
+	void GetAABB( AABB3& out ) const
+	{
+		out.bbmin = V3( TMIN( P1.x, TMIN( P2.x, P3.x ) ), TMIN( P1.y, TMIN( P2.y, P3.y ) ), TMIN( P1.z, TMIN( P2.z, P3.z ) ) );
+		out.bbmax = V3( TMAX( P1.x, TMAX( P2.x, P3.x ) ), TMAX( P1.y, TMAX( P2.y, P3.y ) ), TMAX( P1.z, TMAX( P2.z, P3.z ) ) );
+	}
+	Vec3 GetNormal() const
+	{
+		return Vec3Cross( P3 - P1, P2 - P1 ).Normalized();
+	}
 };
-typedef std::vector< BSPTriangle > BSPTriVector;
+
+#if 0
+typedef std::vector< Triangle > BSPTriVector;
 
 struct BSPNode
 {
@@ -590,7 +616,7 @@ struct BSPNode
 	}
 	
 	void Split( int depth );
-	void AddTriangleSplit( BSPTriangle* tri );
+	void AddTriangleSplit( Triangle* tri );
 	float IntersectRay( const Vec3& from, const Vec3& to, Vec3* outnormal );
 	bool PickSplitPlane();
 	
@@ -625,7 +651,7 @@ struct BSPTree
 	BSPTree() : root( new BSPNode() ){}
 	~BSPTree(){ delete root; }
 	
-	FORCEINLINE void SetTriangles( BSPTriangle* tris, size_t count )
+	FORCEINLINE void SetTriangles( Triangle* tris, size_t count )
 	{
 		root->triangles.resize( count );
 		TMEMCOPY( &root->triangles[0], tris, count );
@@ -634,6 +660,304 @@ struct BSPTree
 	FORCEINLINE float IntersectRay( const Vec3& from, const Vec3& to, Vec3* outnormal = NULL ){ return root->IntersectRay( from, to, outnormal ); }
 	
 	BSPNode* root;
+};
+#endif
+
+struct BaseRayQuery
+{
+	Vec3 ray_origin;
+	float ray_len;
+	Vec3 _ray_inv_dir;
+	
+	void SetRayDir( Vec3 dir )
+	{
+		dir = dir.Normalized();
+		_ray_inv_dir = V3
+		(
+			safe_fdiv( 1, dir.x ),
+			safe_fdiv( 1, dir.y ),
+			safe_fdiv( 1, dir.z )
+		);
+	}
+	void SetRay( const Vec3& r0, const Vec3& r1 )
+	{
+		ray_origin = r0;
+		ray_len = ( r1 - r0 ).Length();
+		SetRayDir( r1 - r0 );
+	}
+};
+
+bool RayAABBTest( const Vec3& ro, const Vec3& inv_n, float len, const Vec3& bbmin, const Vec3& bbmax );
+
+struct AABBTree
+{
+	struct Node // size = 8(3+3+2) * 4(float/int32)
+	{
+		Vec3 bbmin;
+		Vec3 bbmax;
+		int32_t ch; // ch0 = ch, ch1 = ch + 1
+		int32_t ido; // item data offset
+	};
+	
+	// AABBs must be stored manually if necessary
+	void SetAABBs( AABB3* aabbs, size_t count );
+	
+	template< class T > bool RayQuery( T& rq, int32_t node = 0 )
+	{
+		AABBTree::Node& N = m_nodes[ node ];
+		if( RayAABBTest( rq.ray_origin, rq._ray_inv_dir, rq.ray_len, N.bbmin, N.bbmax ) == false )
+			return true;
+		
+		if( N.ido != -1 )
+		{
+			if( rq( &m_itemidx[ N.ido + 1 ], m_itemidx[ N.ido ] ) == false )
+				return false;
+		}
+		
+		// child nodes
+		if( N.ch != -1 )
+		{
+			if( RayQuery( rq, N.ch + 0 ) == false ) return false;
+			if( RayQuery( rq, N.ch + 1 ) == false ) return false;
+		}
+		
+		return true;
+	}
+	
+	template< class T > void Query( const Vec3& qmin, const Vec3& qmax, T& out, int32_t node = 0 )
+	{
+		AABBTree::Node& N = m_nodes[ node ];
+		if( qmin.x > N.bbmax.x || qmax.x < N.bbmin.x ||
+			qmin.y > N.bbmax.y || qmax.y < N.bbmin.y ||
+			qmin.z > N.bbmax.z || qmax.z < N.bbmin.z )
+			return;
+		
+		// items
+		if( N.ido != -1 )
+		{
+			out( &m_itemidx[ N.ido + 1 ], m_itemidx[ N.ido ] );
+		}
+		
+		// child nodes
+		if( N.ch != -1 )
+		{
+			Query( qmin, qmax, out, N.ch + 0 );
+			Query( qmin, qmax, out, N.ch + 1 );
+		}
+	}
+	
+	template< class T > void GetAll( T& out )
+	{
+		for( size_t i = 0; i < m_itemidx.size(); i += 1 + m_itemidx[ i ] )
+		{
+			out( &m_itemidx[ i + 1 ], m_itemidx[ i ] );
+		}
+	}
+	
+	void _MakeNode( int32_t node, AABB3* aabbs, int32_t* sampidx_data, size_t sampidx_count, int depth );
+	
+	// BVH
+	std::vector< Node > m_nodes;
+	std::vector< int32_t > m_itemidx; // format: <count> [ <item> x count ], ...
+};
+
+struct TriTree
+{
+	void SetTris( Triangle* tris, size_t count );
+	bool IntersectRay( const Vec3& from, const Vec3& to );
+	float IntersectRayDist( const Vec3& from, const Vec3& to, int32_t* outtid );
+	
+	AABBTree m_bbTree;
+	std::vector< Triangle > m_tris;
+};
+
+
+
+struct ltr_MeshPart
+{
+	u32 m_vertexCount;
+	u32 m_vertexOffset;
+	u32 m_indexCount;
+	u32 m_indexOffset;
+	int m_shadow;
+};
+typedef std::vector< ltr_MeshPart > MeshPartVector;
+
+struct ltr_Mesh
+{
+	ltr_Mesh( ltr_Scene* s ) : m_scene( s ){}
+	
+	ltr_Scene* m_scene;
+	std::string m_ident;
+	Vec3Vector m_vpos;
+	Vec3Vector m_vnrm;
+	Vec2Vector m_vtex1;
+	Vec2Vector m_vtex2;
+	U32Vector m_indices;
+	MeshPartVector m_parts;
+};
+typedef std::vector< ltr_Mesh* > MeshPtrVector;
+
+struct ltr_MeshInstance
+{
+	// input
+	ltr_Mesh* mesh;
+	std::string m_ident;
+	float m_importance;
+	Mat4 matrix;
+	u32 lm_width;
+	u32 lm_height;
+	bool m_shadow;
+	bool m_samplecont;
+	
+	// tmp
+	Vec3Vector m_vpos;
+	Vec3Vector m_vnrm;
+	Vec2Vector m_vtex;
+	Vec2Vector m_ltex;
+	
+	// output
+	TriTree m_triTree;
+	Vec3Vector m_samples_pos;
+	Vec3Vector m_samples_nrm;
+	U32Vector m_samples_loc;
+	Vec4Vector m_samples_radinfo;
+	Vec3Vector m_lightmap;
+};
+typedef std::vector< ltr_MeshInstance* > MeshInstPtrVector;
+
+struct ltr_Light
+{
+	void QueryMeshInsts( AABBTree& tree, std::vector< int32_t >& out );
+	
+	u32 type;
+	Vec3 position;
+	Vec3 direction;
+	Vec3 up_direction;
+	Vec3 color_rgb;
+	float range;
+	float power;
+	float light_radius;
+	int shadow_sample_count;
+	float spot_angle_out;
+	float spot_angle_in;
+	float spot_curve;
+	// positions for point/spot, directions for directional lights
+	std::vector< Vec3 > samples;
+};
+typedef std::vector< ltr_Light > LightVector;
+
+typedef std::vector< ltr_SampleInfo > SampleVector;
+
+struct ltr_RadSampleGeom
+{
+	Vec3 pos;
+	Vec3 normal;
+};
+typedef std::vector< ltr_RadSampleGeom > RadSampleGeomVector;
+
+struct ltr_RadSampleColors
+{
+	Vec3 diffuseColor;
+	Vec3 totalLight;
+	Vec3 outputEnergy;
+	Vec3 inputEnergy;
+	float area;
+};
+typedef std::vector< ltr_RadSampleColors > RadSampleColorsVector;
+
+struct ltr_RadLink
+{
+	uint32_t other;
+	float factor;
+};
+typedef std::vector< ltr_RadLink > RadLinkVector;
+
+struct dw_lmrender_data
+{
+	ltr_MeshInstance* mi;
+	ltr_Light* light;
+	float angle_out_rad;
+	float angle_in_rad;
+	float angle_diff;
+};
+
+struct ltr_Scene
+{
+	ltr_Scene() : m_workStage( "not started" ), m_workCompletion(0), m_num_cpus( ltrnumcpus() )
+	{
+		ltr_GetConfig( &config, NULL );
+		
+		m_sampleMI.m_samplecont = true;
+		m_sampleMI.mesh = NULL;
+		m_sampleMI.m_importance = 0;
+		m_sampleMI.lm_width = 0;
+		m_sampleMI.lm_height = 0;
+		m_meshInstances.push_back( &m_sampleMI );
+	}
+	~ltr_Scene()
+	{
+		for( size_t i = 1; i < m_meshInstances.size(); ++i )
+			delete m_meshInstances[i];
+		for( size_t i = 0; i < m_meshes.size(); ++i )
+			delete m_meshes[i];
+		for( size_t i = 0; i < m_workOutput.size(); ++i )
+			delete [] m_workOutput[i].lightmap_rgb;
+	}
+	
+	void Job_PreXForm_Inner( ltr_MeshInstance* mi );
+	static void Job_PreXForm( LTRWorker::IO* io );
+	
+	void Job_ColInfo_Inner( ltr_MeshInstance* mi );
+	static void Job_ColInfo( LTRWorker::IO* io );
+	
+	void Job_Samples_Inner( ltr_MeshInstance* mi );
+	static void Job_Samples( LTRWorker::IO* io );
+	
+	void Job_LMRender_Point_Inner( size_t i, dw_lmrender_data* data );
+	void Job_LMRender_Spot_Inner( size_t i, dw_lmrender_data* data );
+	void Job_LMRender_Direct_Inner( size_t i, dw_lmrender_data* data );
+	static void Job_LMRender_Point( LTRWorker::IO* io );
+	static void Job_LMRender_Spot( LTRWorker::IO* io );
+	static void Job_LMRender_Direct( LTRWorker::IO* io );
+	void Int_LMRender( ltr_Light& light, ltr_MeshInstance* mi );
+	
+	void Int_RDGenLinks();
+	void Int_RDBounce();
+	
+	void Job_AORender_Inner( ltr_MeshInstance* mi, size_t i );
+	static void Job_AORender( LTRWorker::IO* io );
+	
+	void Int_Finalize();
+	
+	static void Job_MainProc( LTRWorker::IO* io );
+	
+	bool VisibilityTest( const Vec3& A, const Vec3& B );
+	float VisibilityTest( const Vec3& A, ltr_Light* light );
+	float DistanceTest( const Vec3& A, const Vec3& B, Vec3* outnormal = NULL );
+	
+	ltr_Config config;
+	
+	MeshPtrVector m_meshes;
+	MeshInstPtrVector m_meshInstances;
+	LightVector m_lights;
+	ltr_MeshInstance m_sampleMI;
+	SampleVector m_samples;
+	
+	RadSampleGeomVector m_radSampleGeoms;
+	RadSampleColorsVector m_radSampleColors;
+	RadLinkVector m_radLinks;
+	U32Vector m_radLinkMap;
+	
+	AABBTree m_instTree;
+	WorkOutputVector m_workOutput;
+	
+	const char* m_workStage;
+	float m_workCompletion;
+	
+	int m_num_cpus;
+	LTRWorker m_worker;
+	LTRWorker m_rootWorker;
 };
 
 
