@@ -772,6 +772,26 @@ actually_make_leaf:
 }
 
 
+
+void TriTree::SetTris( Triangle* tris, size_t count )
+{
+	m_tris.clear();
+	std::vector< AABB3 > bbs;
+	for( size_t i = 0; i < count; ++i )
+	{
+		if( tris[ i ].CheckIsUseful() )
+		{
+			AABB3 bb;
+			tris[ i ].GetAABB( bb );
+			bbs.push_back( bb );
+			m_tris.push_back( tris[ i ] );
+		}
+	}
+	
+	m_bbTree.SetAABBs( VDATA( bbs ), bbs.size() );
+}
+
+
 struct AnyHitRayQuery : BaseRayQuery
 {
 	AnyHitRayQuery( Triangle* ta, const Vec3& r0, const Vec3& r1 ) : hit(false), tris( ta ), ray_end( r1 )
@@ -794,6 +814,14 @@ struct AnyHitRayQuery : BaseRayQuery
 	Triangle* tris;
 	Vec3 ray_end;
 };
+
+bool TriTree::IntersectRay( const Vec3& from, const Vec3& to )
+{
+	AnyHitRayQuery query( VDATA( m_tris ), from, to );
+	m_bbTree.RayQuery( query );
+	return query.hit;
+}
+
 
 struct ClosestHitRayQuery : BaseRayQuery
 {
@@ -822,32 +850,6 @@ struct ClosestHitRayQuery : BaseRayQuery
 	Vec3 ray_end;
 };
 
-
-void TriTree::SetTris( Triangle* tris, size_t count )
-{
-	m_tris.clear();
-	std::vector< AABB3 > bbs;
-	for( size_t i = 0; i < count; ++i )
-	{
-		if( tris[ i ].CheckIsUseful() )
-		{
-			AABB3 bb;
-			tris[ i ].GetAABB( bb );
-			bbs.push_back( bb );
-			m_tris.push_back( tris[ i ] );
-		}
-	}
-	
-	m_bbTree.SetAABBs( VDATA( bbs ), bbs.size() );
-}
-
-bool TriTree::IntersectRay( const Vec3& from, const Vec3& to )
-{
-	AnyHitRayQuery query( VDATA( m_tris ), from, to );
-	m_bbTree.RayQuery( query );
-	return query.hit;
-}
-
 float TriTree::IntersectRayDist( const Vec3& from, const Vec3& to, int32_t* outtid )
 {
 	ClosestHitRayQuery query( VDATA( m_tris ), from, to );
@@ -857,6 +859,85 @@ float TriTree::IntersectRayDist( const Vec3& from, const Vec3& to, int32_t* outt
 		*outtid = query.hitid;
 	}
 	return query.closest;
+}
+
+
+
+static float PointTriangleDistance( const Vec3& pt, const Vec3& t0, const Vec3& t1, const Vec3& t2 )
+{
+	// plane
+	Vec3 nrm = Vec3Cross( t1 - t0, t2 - t0 ).Normalized();
+	float pd = fabsf( Vec3Dot( nrm, pt ) - Vec3Dot( nrm, t0 ) );
+	
+	// tangents
+	Vec3 tan0 = ( t1 - t0 ).Normalized();
+	Vec3 tan1 = ( t2 - t1 ).Normalized();
+	Vec3 tan2 = ( t0 - t2 ).Normalized();
+	
+	// bounds
+	float t0p = Vec3Dot( tan0, pt ), t0min = Vec3Dot( tan0, t0 ), t0max = Vec3Dot( tan0, t1 );
+	float t1p = Vec3Dot( tan1, pt ), t1min = Vec3Dot( tan1, t1 ), t1max = Vec3Dot( tan1, t2 );
+	float t2p = Vec3Dot( tan2, pt ), t2min = Vec3Dot( tan2, t2 ), t2max = Vec3Dot( tan2, t0 );
+	
+	// check corners
+	if( t0min >= t0p && t2max <= t2p ) return ( pt - t0 ).Length();
+	if( t1min >= t1p && t0max <= t0p ) return ( pt - t1 ).Length();
+	if( t2min >= t2p && t1max <= t1p ) return ( pt - t2 ).Length();
+	
+	// edge normals
+	Vec3 en0 = Vec3Cross( t1 - t0, nrm ).Normalized();
+	Vec3 en1 = Vec3Cross( t2 - t1, nrm ).Normalized();
+	Vec3 en2 = Vec3Cross( t0 - t2, nrm ).Normalized();
+	
+	// signed distances from edges
+	float ptd0 = Vec3Dot( en0, pt ) - Vec3Dot( en0, t0 );
+	float ptd1 = Vec3Dot( en1, pt ) - Vec3Dot( en1, t1 );
+	float ptd2 = Vec3Dot( en2, pt ) - Vec3Dot( en2, t2 );
+	
+	// check edges
+	if( ptd0 >= 0 && t0p >= t0min && t0p <= t0max ) return V2( pd, ptd0 ).Length();
+	if( ptd1 >= 0 && t1p >= t1min && t1p <= t1max ) return V2( pd, ptd1 ).Length();
+	if( ptd2 >= 0 && t2p >= t2min && t2p <= t2max ) return V2( pd, ptd2 ).Length();
+	
+	// inside
+	return pd;
+}
+
+struct DistanceBBQuery
+{
+	DistanceBBQuery( Triangle* ta, const Vec3& p, float d ) : pos( p ), dist( d ), tris( ta ){ RecalcBB(); }
+	
+	void operator () ( int32_t* ids, int32_t count )
+	{
+		for( int32_t i = 0; i < count; ++i )
+		{
+			Triangle& T = tris[ ids[ i ] ];
+			float ndst = PointTriangleDistance( pos, T.P1, T.P2, T.P3 );
+			if( ndst < dist )
+			{
+				dist = ndst;
+				RecalcBB();
+			}
+		}
+	}
+	
+	FORCEINLINE void RecalcBB()
+	{
+		bbmin = pos - V3(dist);
+		bbmax = pos + V3(dist);
+	}
+	
+	Vec3 bbmin, bbmax;
+	Vec3 pos;
+	float dist;
+	Triangle* tris;
+};
+
+float TriTree::GetDistance( const Vec3& p, float dist )
+{
+	DistanceBBQuery query( VDATA( m_tris ), p, dist );
+	m_bbTree.DynBBQuery( query );
+	return query.dist;
 }
 
 

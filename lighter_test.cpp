@@ -310,8 +310,8 @@ void testfunc_mesh2()
 	ltr_GetConfig( &cfg, scene );
 	cfg.ao_distance = 2;
 	cfg.global_size_factor = 8;
-	cfg.blur_size = 0;
-	cfg.ds2x = 1;
+	cfg.blur_size = 1;
+//	cfg.ds2x = 1;
 	ltr_SetConfig( scene, &cfg );
 	
 	// MESH 1
@@ -363,10 +363,10 @@ void testfunc_mesh2()
 	// LIGHTS
 	ltr_LightInfo lights[] =
 	{
-		{ LTR_LT_POINT, { -2.18f, -4.04f, 1.40f }, {0,0,0}, {0,0,0}, { 0.9f, 0.7f, 0.5f }, 16.0f, 1.0f, 0.1f, 5,  0, 0, 0 },
-		{ LTR_LT_POINT, { 2.18f, 4.04f, 1.40f }, {0,0,0}, {0,0,0}, { 0.5f, 0.7f, 0.9f }, 16.0f, 1.0f, 0.1f, 5,  0, 0, 0 },
-		{ LTR_LT_SPOT, { 0, 0, 1.60f }, {0,0,-1}, {1,0,0}, { 0.7f, 0.1f, 0.05f }, 16.0f, 1.0f, 0.1f, 5, 45.0f, 25.0f, 0.5f },
-		{ LTR_LT_DIRECT, {0,0,0}, { 1, 1, 1 }, {0,0,0}, { 0.6f, 0.55f, 0.5f }, 1000.0f, 1.0f, 0.0f, 1,  0, 0, 0 },
+		{ LTR_LT_POINT, { -2.18f, -4.04f, 1.40f }, {0,0,0}, {0,0,0}, { 0.9f, 0.7f, 0.5f }, 16.0f, 1.0f, 0.2f, 5,  0, 0, 0 },
+		{ LTR_LT_POINT, { 2.18f, 4.04f, 1.40f }, {0,0,0}, {0,0,0}, { 0.5f, 0.7f, 0.9f }, 16.0f, 1.0f, 0.2f, 5,  0, 0, 0 },
+		{ LTR_LT_SPOT, { 0, 0, 1.60f }, {0,0,-1}, {1,0,0}, { 0.7f, 0.1f, 0.05f }, 16.0f, 1.0f, 0.2f, 5, 45.0f, 25.0f, 0.5f },
+		{ LTR_LT_DIRECT, {0,0,0}, { 1, 1, 1 }, {0,0,0}, { 0.6f, 0.55f, 0.5f }, 1000.0f, 1.0f, 0.2f, 1,  0, 0, 0 },
 	};
 	for( size_t lt = 0; lt < sizeof(lights)/sizeof(lights[0]); ++lt )
 		ltr_LightAdd( scene, &lights[ lt ] );

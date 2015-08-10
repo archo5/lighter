@@ -329,6 +329,8 @@ struct Vec2
 	}
 };
 
+static FORCEINLINE Vec2 V2( float x, float y ){ Vec2 o = { x, y }; return o; }
+
 FORCEINLINE float Vec2Dot( const Vec2& v1, const Vec2& v2 ){ return v1.x * v2.x + v1.y * v2.y; }
 FORCEINLINE float Vec2Cross( const Vec2& v1, const Vec2& v2 )
 {
@@ -747,6 +749,28 @@ struct AABBTree
 		return true;
 	}
 	
+	template< class T > void DynBBQuery( T& bbq, int32_t node = 0 )
+	{
+		AABBTree::Node& N = m_nodes[ node ];
+		if( bbq.bbmin.x > N.bbmax.x || bbq.bbmax.x < N.bbmin.x ||
+			bbq.bbmin.y > N.bbmax.y || bbq.bbmax.y < N.bbmin.y ||
+			bbq.bbmin.z > N.bbmax.z || bbq.bbmax.z < N.bbmin.z )
+			return;
+		
+		// items
+		if( N.ido != -1 )
+		{
+			bbq( &m_itemidx[ N.ido + 1 ], m_itemidx[ N.ido ] );
+		}
+		
+		// child nodes
+		if( N.ch != -1 )
+		{
+			DynBBQuery( bbq, node + 1 );
+			DynBBQuery( bbq, N.ch );
+		}
+	}
+	
 	template< class T > void Query( const Vec3& qmin, const Vec3& qmax, T& out, int32_t node = 0 )
 	{
 		AABBTree::Node& N = m_nodes[ node ];
@@ -789,6 +813,7 @@ struct TriTree
 	void SetTris( Triangle* tris, size_t count );
 	bool IntersectRay( const Vec3& from, const Vec3& to );
 	float IntersectRayDist( const Vec3& from, const Vec3& to, int32_t* outtid );
+	float GetDistance( const Vec3& p, float dist );
 	
 	AABBTree m_bbTree;
 	std::vector< Triangle > m_tris;
@@ -906,6 +931,11 @@ struct dw_lmrender_data
 	float angle_diff;
 };
 
+#define MAX_PENUMBRA_SIZE 2.0f
+// #define MAX_PENUMBRA_STEP 0.1f
+#define MAX_PENUMBRA_STEP 1.0f
+#define SAMPLE_SHADOW_OFFSET 0.005f
+
 struct ltr_Scene
 {
 	ltr_Scene() : m_workStage( "not started" ), m_workCompletion(0), m_num_cpus( ltrnumcpus() )
@@ -957,7 +987,8 @@ struct ltr_Scene
 	static void Job_MainProc( LTRWorker::IO* io );
 	
 	bool VisibilityTest( const Vec3& A, const Vec3& B );
-	float VisibilityTest( const Vec3& A, ltr_Light* light );
+	float Distance( const Vec3& p );
+	float CalcInvShadowFactor( const Vec3& from, const Vec3& to, float k ); // k = penumbra factor
 	float DistanceTest( const Vec3& A, const Vec3& B, Vec3* outnormal = NULL );
 	
 	ltr_Config config;

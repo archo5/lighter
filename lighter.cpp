@@ -146,18 +146,64 @@ bool ltr_Scene::VisibilityTest( const Vec3& A, const Vec3& B )
 	return query.hit;
 }
 
-float ltr_Scene::VisibilityTest( const Vec3& A, ltr_Light* light )
+
+struct SceneDistanceQuery
 {
-	float total = 0.0f;
-	for( int i = 0; i < light->shadow_sample_count; ++i )
+	SceneDistanceQuery( ltr_Scene* s, const Vec3& p ) : pos( p ), dist( MAX_PENUMBRA_SIZE ), S( s ){ RecalcBB(); }
+	
+	void operator () ( int32_t* ids, int32_t count )
 	{
-		const Vec3& B = light->position + Vec3::CreateRandomVector( light->light_radius );
-		
-		float hit = VisibilityTest( B, A ) ? 0.0f : 1.0f; // when do we need gradient hits?
-		if( hit < 1.0f )
-			total += TMIN( ( 1 - hit ) * ( B - A ).Length() * 1000.0f, 1.0f );
+		for( int32_t i = 0; i < count; ++i )
+		{
+			ltr_MeshInstance* mi = S->m_meshInstances[ ids[ i ] ];
+			if( mi->m_shadow )
+			{
+				float ndst = mi->m_triTree.GetDistance( pos, dist );
+				if( ndst < dist )
+				{
+					dist = ndst;
+					RecalcBB();
+				}
+			}
+		}
 	}
-	return 1.0f - total / (float) light->shadow_sample_count;
+	
+	FORCEINLINE void RecalcBB()
+	{
+		bbmin = pos - V3(dist);
+		bbmax = pos + V3(dist);
+	}
+	
+	Vec3 bbmin, bbmax;
+	Vec3 pos;
+	float dist;
+	ltr_Scene* S;
+};
+
+float ltr_Scene::Distance( const Vec3& p )
+{
+	SceneDistanceQuery query( this, p );
+	m_instTree.DynBBQuery( query );
+	return query.dist;
+}
+
+float ltr_Scene::CalcInvShadowFactor( const Vec3& from, const Vec3& to, float k )
+{
+	Vec3 rd = ( to - from ).Normalized();
+	float mint = 0.001f;
+	float maxt = ( to - from ).Length();
+	
+	float res = 1.0f;
+	for( float t = mint; t < maxt; )
+	{
+		float h = Distance( from + rd * t );
+		if( h < 0.001f )
+			return 0.0f;
+		res = TMIN( res, h / TMIN( t * k, MAX_PENUMBRA_SIZE ) );
+		h = TMIN( h, MAX_PENUMBRA_STEP );
+		t += h;
+	}
+	return res;
 }
 
 
@@ -409,7 +455,7 @@ void ltr_Scene::Job_LMRender_Point_Inner( size_t i, dw_lmrender_data* data )
 		float f_ndotl = TMAX( 0.0f, Vec3Dot( sample2light, SN ) );
 		if( f_dist * f_ndotl <= 0 )
 			return; // continue;
-		float f_vistest = VisibilityTest( SP, &light );
+		float f_vistest = CalcInvShadowFactor( SP + SN * SAMPLE_SHADOW_OFFSET, light.position, light.light_radius );
 		mi->m_lightmap[ i ] += light.color_rgb * ( f_dist * f_ndotl * f_vistest );
 	}
 }
@@ -438,7 +484,7 @@ void ltr_Scene::Job_LMRender_Spot_Inner( size_t i, dw_lmrender_data* data )
 		f_dir = pow( f_dir, light.spot_curve );
 		if( f_dist * f_ndotl * f_dir <= 0 )
 			return; // continue;
-		float f_vistest = VisibilityTest( SP, &light );
+		float f_vistest = CalcInvShadowFactor( SP + SN * SAMPLE_SHADOW_OFFSET, light.position, light.light_radius );
 		mi->m_lightmap[ i ] += light.color_rgb * ( f_dist * f_ndotl * f_dir * f_vistest );
 	}
 }
@@ -453,6 +499,8 @@ void ltr_Scene::Job_LMRender_Direct_Inner( size_t i, dw_lmrender_data* data )
 	{
 		Vec3& SP = mi->m_samples_pos[ i ];
 		Vec3& SN = mi->m_samples_nrm[ i ];
+		
+#if 0
 		float f_ndotl = 0.0f;
 		float f_vistest = 0.0f;
 		Vec3 ray_origin = SP;
@@ -471,6 +519,10 @@ void ltr_Scene::Job_LMRender_Direct_Inner( size_t i, dw_lmrender_data* data )
 		f_ndotl /= light.shadow_sample_count;
 		f_vistest /= light.shadow_sample_count;
 		f_vistest = 1.0f - f_vistest;
+#else
+		float f_ndotl = TMAX( 0.0f, Vec3Dot( light.direction, SN ) );
+		float f_vistest = CalcInvShadowFactor( SP + SN * SAMPLE_SHADOW_OFFSET, SP + light.direction * light.range, light.light_radius );
+#endif
 		mi->m_lightmap[ i ] += light.color_rgb * ( f_ndotl * f_vistest );
 	}
 }
