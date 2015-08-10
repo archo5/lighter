@@ -163,7 +163,7 @@ float ltr_Scene::VisibilityTest( const Vec3& A, ltr_Light* light )
 
 struct SceneClosestHitRayQuery : BaseRayQuery
 {
-	SceneClosestHitRayQuery( ltr_Scene* s, const Vec3& r0, const Vec3& r1 ) : closest(2), hitmid(-1), hittid(-1), S(s), ray_end(r1)
+	SceneClosestHitRayQuery( ltr_Scene* s, const Vec3& r0, const Vec3& r1, Vec3* on ) : closest(2), outnormal(on), S(s), ray_end(r1)
 	{
 		SetRay( r0, r1 );
 	}
@@ -174,13 +174,13 @@ struct SceneClosestHitRayQuery : BaseRayQuery
 			ltr_MeshInstance* mi = S->m_meshInstances[ ids[ i ] ];
 			if( mi->m_shadow )
 			{
-				int32_t tid;
-				float dist = mi->m_triTree.IntersectRayDist( ray_origin, ray_end, &tid );
+				Vec3 nrm;
+				float dist = mi->m_bspTree.IntersectRay( ray_origin, ray_end, &nrm );
 				if( dist < closest )
 				{
 					closest = dist;
-					hitmid = ids[ i ];
-					hittid = tid;
+					if( outnormal )
+						*outnormal = nrm;
 				}
 			}
 		}
@@ -188,8 +188,7 @@ struct SceneClosestHitRayQuery : BaseRayQuery
 	}
 	
 	float closest;
-	int32_t hitmid;
-	int32_t hittid;
+	Vec3* outnormal;
 	ltr_Scene* S;
 	Vec3 ray_end;
 };
@@ -200,12 +199,8 @@ float ltr_Scene::DistanceTest( const Vec3& A, const Vec3& B, Vec3* outnormal )
 	Vec3 mA = A + diffnorm * SMALL_FLOAT;
 	Vec3 mB = B - diffnorm * SMALL_FLOAT;
 	
-	SceneClosestHitRayQuery query( this, mA, mB );
+	SceneClosestHitRayQuery query( this, mA, mB, outnormal );
 	m_instTree.RayQuery( query );
-	if( query.hitmid != -1 && outnormal )
-	{
-		*outnormal = m_meshInstances[ query.hitmid ]->m_triTree.m_tris[ query.hittid ].GetNormal();
-	}
 	return query.closest;
 }
 
@@ -299,6 +294,8 @@ void ltr_Scene::Job_ColInfo_Inner( ltr_MeshInstance* mi )
 		}
 	}
 	
+	if( tris.size() )
+		mi->m_bspTree.SetTriangles( VDATA( tris ), tris.size() );
 	mi->m_triTree.SetTris( VDATA( tris ), tris.size() );
 }
 

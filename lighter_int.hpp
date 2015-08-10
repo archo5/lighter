@@ -603,8 +603,8 @@ struct Triangle
 	}
 };
 
-#if 0
-typedef std::vector< Triangle > BSPTriVector;
+
+typedef std::vector< Triangle > TriVector;
 
 struct BSPNode
 {
@@ -643,7 +643,7 @@ struct BSPNode
 	
 	BSPNode *front_node, *back_node;
 	
-	BSPTriVector triangles;
+	TriVector triangles;
 };
 
 struct BSPTree
@@ -661,7 +661,7 @@ struct BSPTree
 	
 	BSPNode* root;
 };
-#endif
+
 
 struct BaseRayQuery
 {
@@ -695,7 +695,7 @@ struct AABBTree
 	{
 		Vec3 bbmin;
 		Vec3 bbmax;
-		int32_t ch; // ch0 = ch, ch1 = ch + 1
+		int32_t ch; // ch0 = node + 1, ch1 = ch
 		int32_t ido; // item data offset
 	};
 	
@@ -717,8 +717,8 @@ struct AABBTree
 		{
 			printf( " {\n" );
 			depth++;
+			Dump( node + 1, depth );
 			Dump( N.ch, depth );
-			Dump( N.ch+1, depth );
 			depth--;
 			_printdepth(depth); printf( "}\n" );
 		}
@@ -740,8 +740,8 @@ struct AABBTree
 		// child nodes
 		if( N.ch != -1 )
 		{
-			if( RayQuery( rq, N.ch + 0 ) == false ) return false;
-			if( RayQuery( rq, N.ch + 1 ) == false ) return false;
+			if( RayQuery( rq, node + 1 ) == false ) return false;
+			if( RayQuery( rq, N.ch ) == false ) return false;
 		}
 		
 		return true;
@@ -764,8 +764,8 @@ struct AABBTree
 		// child nodes
 		if( N.ch != -1 )
 		{
-			Query( qmin, qmax, out, N.ch + 0 );
-			Query( qmin, qmax, out, N.ch + 1 );
+			Query( qmin, qmax, out, node + 1 );
+			Query( qmin, qmax, out, N.ch );
 		}
 	}
 	
@@ -840,6 +840,7 @@ struct ltr_MeshInstance
 	Vec2Vector m_ltex;
 	
 	// output
+	BSPTree m_bspTree;
 	TriTree m_triTree;
 	Vec3Vector m_samples_pos;
 	Vec3Vector m_samples_nrm;

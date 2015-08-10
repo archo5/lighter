@@ -424,7 +424,7 @@ void Downsample2X( float* dst, unsigned dstW, unsigned dstH, float* src, unsigne
 }
 
 
-#if 0
+
 #define BSP_NO_HIT 2.0f
 #define BSP_MAX_NODE_COUNT 16
 #define BSP_MAX_NODE_DEPTH 32
@@ -440,14 +440,14 @@ void BSPNode::Split( int depth )
 			back_node = new BSPNode;
 			for( size_t i = 0; i < triangles.size(); ++i )
 				AddTriangleSplit( &triangles[i] );
-			BSPTriVector().swap( triangles );
+			TriVector().swap( triangles );
 			front_node->Split( depth + 1 );
 			back_node->Split( depth + 1 );
 		}
 	}
 }
 
-void BSPNode::AddTriangleSplit( BSPTriangle* tri )
+void BSPNode::AddTriangleSplit( Triangle* tri )
 {
 	Vec3 P1 = tri->P1;
 	Vec3 P2 = tri->P2;
@@ -506,10 +506,10 @@ float BSPNode::IntersectRay( const Vec3& from, const Vec3& to, Vec3* outnormal )
 	else
 	{
 		float closest_hit = BSP_NO_HIT;
-		BSPTriangle* closest_tri = NULL;
+		Triangle* closest_tri = NULL;
 		for( size_t i = 0; i < triangles.size(); ++i )
 		{
-			BSPTriangle& T = triangles[i];
+			Triangle& T = triangles[i];
 			float hit = IntersectLineSegmentTriangle( from, to, T.P1, T.P2, T.P3 );
 			if( hit < closest_hit )
 			{
@@ -544,7 +544,7 @@ bool BSPNode::PickSplitPlane()
 	Vec3Vector points;
 	for( size_t i = 0; i < triangles.size(); ++i )
 	{
-		BSPTriangle& T = triangles[i];
+		Triangle& T = triangles[i];
 		TFINDADD( points, T.P1 );
 		TFINDADD( points, T.P2 );
 		TFINDADD( points, T.P3 );
@@ -582,7 +582,7 @@ bool BSPNode::PickSplitPlane()
 	float d1, d2, d3;
 	for( size_t i = 0; i < triangles.size(); ++i )
 	{
-		BSPTriangle& T = triangles[i];
+		Triangle& T = triangles[i];
 		d1 = Vec3Dot( T.P1, N ) - D;
 		d2 = Vec3Dot( T.P2, N ) - D;
 		d3 = Vec3Dot( T.P3, N ) - D;
@@ -607,7 +607,7 @@ bool BSPNode::PickSplitPlane()
 	}
 	return false;
 }
-#endif
+
 
 
 bool RayAABBTest( const Vec3& ro, const Vec3& inv_n, float len, const Vec3& bbmin, const Vec3& bbmax )
@@ -704,9 +704,8 @@ void AABBTree::_MakeNode( int32_t node, AABB3* aabbs, int32_t* sampidx_data, siz
 		depth < AABBTREE_MAX_SPLIT_DEPTH )
 	{
 		// split
-		int32_t ch = m_nodes.size();
 		N.ido = -1;
-		N.ch = ch;
+		N.ch = -1;
 		int numsplittable = 0;
 		
 		Vec3 sbbmin = V3(FLT_MAX), sbbmax = V3(-FLT_MAX);
@@ -754,9 +753,10 @@ void AABBTree::_MakeNode( int32_t node, AABB3* aabbs, int32_t* sampidx_data, siz
 		
 		// -- DO NOT TOUCH <N> ANYMORE --
 		m_nodes.push_back( AABBTree::Node() );
+		_MakeNode( m_nodes.size() - 1, aabbs, VDATA( subsampidx_split ), mid, depth + 1 );
+		m_nodes[ node ].ch = m_nodes.size();
 		m_nodes.push_back( AABBTree::Node() );
-		_MakeNode( ch + 0, aabbs, VDATA( subsampidx_split ), mid, depth + 1 );
-		_MakeNode( ch + 1, aabbs, VDATA( subsampidx_split, mid ), subsampidx_split.size() - mid, depth + 1 );
+		_MakeNode( m_nodes.size() - 1, aabbs, VDATA( subsampidx_split, mid ), subsampidx_split.size() - mid, depth + 1 );
 	}
 	else
 	{
