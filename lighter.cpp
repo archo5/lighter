@@ -353,9 +353,10 @@ void ltr_Scene::Job_Samples_Inner( ltr_MeshInstance* mi )
 	mi->m_samples_radinfo.reserve( sample_count );
 	for( size_t i = 0; i < R2.size(); ++i )
 	{
-		Vec3& N = R2[ i ];
+		Vec3 N = R2[ i ];
 		if( !N.IsZero() )
 		{
+			N = N.Normalized();
 			Vec3 P = R1[ i ];
 			Vec4 XD = R3[ i ];
 			if( config.max_correct_dist )
