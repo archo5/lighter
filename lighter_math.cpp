@@ -647,6 +647,7 @@ bool RayAABBTest( const Vec3& ro, const Vec3& inv_n, float len, const Vec3& bbmi
 
 #define AABBTREE_MIN_SPLIT_SIZE 4
 #define AABBTREE_MAX_SPLIT_DEPTH 16
+#define AABBTREE_SIZE_SPLIT_FACTOR 3
 
 struct _AABBTree_SortIndices
 {
@@ -657,7 +658,7 @@ struct _AABBTree_SortIndices
 	{
 		float dot_a = Vec3Dot( splitnrm, aabbs[ idx_a ].Center() );
 		float dot_b = Vec3Dot( splitnrm, aabbs[ idx_b ].Center() );
-		return dot_a <= dot_b;
+		return dot_a < dot_b;
 	}
 };
 
@@ -706,36 +707,36 @@ void AABBTree::_MakeNode( int32_t node, AABB3* aabbs, int32_t* sampidx_data, siz
 		int32_t ch = m_nodes.size();
 		N.ido = -1;
 		N.ch = ch;
+		int numsplittable = 0;
 		
-		// find split direction
-		int sx = 0, sy = 0, sz = 0;
+		Vec3 sbbmin = V3(FLT_MAX), sbbmax = V3(-FLT_MAX);
 		for( size_t i = 0; i < sampidx_count; ++i )
 		{
 			AABB3& bb = aabbs[ sampidx_data[ i ] ];
-			if( bb.Volume() * 2 < Nbbvol )
+			if( bb.Volume() * AABBTREE_SIZE_SPLIT_FACTOR < Nbbvol )
 			{
-				Vec3 bbsize = bb.bbmax - bb.bbmin;
-				if( bbsize.x < bbsize.y && bbsize.x < bbsize.z ) sx++;
-				else if( bbsize.y < bbsize.x && bbsize.y < bbsize.z ) sy++;
-				else sz++;
+				numsplittable++;
+				sbbmin = Vec3::Min( sbbmin, bb.bbmin );
+				sbbmax = Vec3::Max( sbbmax, bb.bbmax );
 			}
 		}
+		Vec3 sbbsize = sbbmax - sbbmin;
 		Vec3 splitnrm = V3(0,0,1);
-		if( sx > sy && sx > sz ) splitnrm = V3(1,0,0);
-		else if( sy > sx && sy > sz ) splitnrm = V3(0,1,0);
+		if( sbbsize.x > sbbsize.y && sbbsize.x > sbbsize.z ) splitnrm = V3(1,0,0);
+		else if( sbbsize.y > sbbsize.x && sbbsize.y > sbbsize.z ) splitnrm = V3(0,1,0);
+		
+		if( numsplittable < AABBTREE_MIN_SPLIT_SIZE )
+			goto actually_make_leaf;
 		
 		std::vector< int32_t > subsampidx_self, subsampidx_split;
 		for( size_t i = 0; i < sampidx_count; ++i )
 		{
 			AABB3& bb = aabbs[ sampidx_data[ i ] ];
-			if( bb.Volume() * 2 < Nbbvol )
+			if( bb.Volume() * AABBTREE_SIZE_SPLIT_FACTOR < Nbbvol )
 				subsampidx_split.push_back( sampidx_data[ i ] );
 			else
 				subsampidx_self.push_back( sampidx_data[ i ] );
 		}
-		
-		if( subsampidx_self.size() < AABBTREE_MIN_SPLIT_SIZE )
-			goto actually_make_leaf;
 		
 		if( subsampidx_self.size() )
 		{
@@ -749,13 +750,13 @@ void AABBTree::_MakeNode( int32_t node, AABB3* aabbs, int32_t* sampidx_data, siz
 		
 		_AABBTree_SortIndices ABTSI = { aabbs, splitnrm };
 		std::sort( subsampidx_split.begin(), subsampidx_split.end(), ABTSI );
-		size_t mid = sampidx_count / 2;
+		size_t mid = subsampidx_split.size() / 2;
 		
 		// -- DO NOT TOUCH <N> ANYMORE --
 		m_nodes.push_back( AABBTree::Node() );
 		m_nodes.push_back( AABBTree::Node() );
 		_MakeNode( ch + 0, aabbs, VDATA( subsampidx_split ), mid, depth + 1 );
-		_MakeNode( ch + 1, aabbs, &subsampidx_split[ mid ], subsampidx_split.size() - mid, depth + 1 );
+		_MakeNode( ch + 1, aabbs, VDATA( subsampidx_split, mid ), subsampidx_split.size() - mid, depth + 1 );
 	}
 	else
 	{

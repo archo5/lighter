@@ -262,16 +262,16 @@ FORCEINLINE float safe_fdiv( float x, float d ){ return d ? x / d : 0; }
 double ltr_gettime();
 
 
-template< class T > T TMIN( const T& a, const T& b ){ return a < b ? a : b; }
-template< class T > T TMAX( const T& a, const T& b ){ return a > b ? a : b; }
-template< class T > void TMEMSET( T* a, size_t c, const T& v )
+template< class T > FORCEINLINE T TMIN( const T& a, const T& b ){ return a < b ? a : b; }
+template< class T > FORCEINLINE T TMAX( const T& a, const T& b ){ return a > b ? a : b; }
+template< class T > FORCEINLINE void TMEMSET( T* a, size_t c, const T& v )
 {
 	for( size_t i = 0; i < c; ++i )
 		a[ i ] = v;
 }
-template< class T > void TMEMCOPY( T* a, const T* src, size_t c ){ memcpy( a, src, c * sizeof(T) ); }
-template< class T, class S > T TLERP( const T& a, const T& b, const S& s ){ return a * ( S(1) - s ) + b * s; }
-template< class T > typename T::value_type* VDATA( T& vec, size_t at = 0 ){ return ( vec.size() ? &vec[0] : (typename T::value_type*) NULL ) + at; }
+template< class T > FORCEINLINE void TMEMCOPY( T* a, const T* src, size_t c ){ memcpy( a, src, c * sizeof(T) ); }
+template< class T, class S > FORCEINLINE T TLERP( const T& a, const T& b, const S& s ){ return a * ( S(1) - s ) + b * s; }
+template< class T > FORCEINLINE typename T::value_type* VDATA( T& vec, size_t at = 0 ){ return ( vec.size() ? &vec[0] : (typename T::value_type*) NULL ) + at; }
 
 
 struct Vec2
@@ -701,6 +701,29 @@ struct AABBTree
 	
 	// AABBs must be stored manually if necessary
 	void SetAABBs( AABB3* aabbs, size_t count );
+	
+	void _printdepth( int depth )
+	{
+		for( int i = 0; i < depth; ++i )
+			printf( "  " );
+	}
+	void Dump( int32_t node = 0, int depth = 0 )
+	{
+		AABBTree::Node& N = m_nodes[ node ];
+		_printdepth(depth); printf( "node #%d (%d items, %.2f;%.2f;%.2f -> %.2f;%.2f;%.2f)",
+			int(node), N.ido != -1 ? int(m_itemidx[ N.ido ]) : 0,
+			N.bbmin.x, N.bbmin.y, N.bbmin.z, N.bbmax.x, N.bbmax.y, N.bbmax.z );
+		if( N.ch != -1 )
+		{
+			printf( " {\n" );
+			depth++;
+			Dump( N.ch, depth );
+			Dump( N.ch+1, depth );
+			depth--;
+			_printdepth(depth); printf( "}\n" );
+		}
+		else printf( "\n" );
+	}
 	
 	template< class T > bool RayQuery( T& rq, int32_t node = 0 )
 	{

@@ -868,6 +868,7 @@ void ltr_Scene::Job_MainProc( LTRWorker::IO* io )
 		std::vector< AABB3 > bbs;
 		for( size_t i = 0; i < S->m_meshInstances.size(); ++i )
 		{
+	//		S->m_meshInstances[ i ]->m_triTree.m_bbTree.Dump();
 			AABBTree::Node& N = S->m_meshInstances[ i ]->m_triTree.m_bbTree.m_nodes[ 0 ];
 			AABB3 bb = { N.bbmin, N.bbmax };
 			bbs.push_back( bb );
