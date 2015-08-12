@@ -207,9 +207,9 @@ float ltr_Scene::CalcInvShadowFactor( const Vec3& from, const Vec3& to, float k 
 }
 
 
-struct SceneClosestHitRayQuery : BaseRayQuery
+struct SceneClosestHitRayQueryBSP : BaseRayQuery
 {
-	SceneClosestHitRayQuery( ltr_Scene* s, const Vec3& r0, const Vec3& r1, Vec3* on ) : closest(2), outnormal(on), S(s), ray_end(r1)
+	SceneClosestHitRayQueryBSP( ltr_Scene* s, const Vec3& r0, const Vec3& r1, Vec3* on ) : closest(2), outnormal(on), S(s), ray_end(r1)
 	{
 		SetRay( r0, r1 );
 	}
@@ -245,7 +245,45 @@ float ltr_Scene::DistanceTest( const Vec3& A, const Vec3& B, Vec3* outnormal )
 	Vec3 mA = A + diffnorm * SMALL_FLOAT;
 	Vec3 mB = B - diffnorm * SMALL_FLOAT;
 	
-	SceneClosestHitRayQuery query( this, mA, mB, outnormal );
+	SceneClosestHitRayQueryBSP query( this, mA, mB, outnormal );
+	m_instTree.RayQuery( query );
+	return query.closest;
+}
+
+
+struct SceneClosestHitRayQueryBBT : BaseRayQuery
+{
+	SceneClosestHitRayQueryBBT( ltr_Scene* s, const Vec3& r0, const Vec3& r1 ) : closest(2), S(s), ray_end(r1)
+	{
+		SetRay( r0, r1 );
+	}
+	bool operator () ( int32_t* ids, int32_t count )
+	{
+		for( int32_t i = 0; i < count; ++i )
+		{
+			ltr_MeshInstance* mi = S->m_meshInstances[ ids[ i ] ];
+			if( mi->m_shadow )
+			{
+				float dist = mi->m_triTree.IntersectRayDist( ray_origin, ray_end, NULL );
+				if( dist < closest )
+					closest = dist;
+			}
+		}
+		return true;
+	}
+	
+	float closest;
+	ltr_Scene* S;
+	Vec3 ray_end;
+};
+
+float ltr_Scene::DistanceTestBBT( const Vec3& A, const Vec3& B )
+{
+	Vec3 diffnorm = ( B - A ).Normalized();
+	Vec3 mA = A + diffnorm * SMALL_FLOAT;
+	Vec3 mB = B - diffnorm * SMALL_FLOAT;
+	
+	SceneClosestHitRayQueryBBT query( this, mA, mB );
 	m_instTree.RayQuery( query );
 	return query.closest;
 }
@@ -730,7 +768,7 @@ void ltr_Scene::Job_AORender_Inner( ltr_MeshInstance* mi, size_t i )
 		for( int s = 0; s < num_samples; ++s )
 		{
 			Vec3 ray_dir = Vec3::CreateSpiralDirVector( SN, randoff, s, num_samples ) * ao_distance;
-			float hit = DistanceTest( ray_origin, ray_origin + ray_dir );
+			float hit = DistanceTestBBT( ray_origin, ray_origin + ray_dir );
 			if( hit < 1.0f )
 				ao_factor += 1.0f - hit;
 		}

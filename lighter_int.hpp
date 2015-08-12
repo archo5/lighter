@@ -990,6 +990,7 @@ struct ltr_Scene
 	float Distance( const Vec3& p );
 	float CalcInvShadowFactor( const Vec3& from, const Vec3& to, float k ); // k = penumbra factor
 	float DistanceTest( const Vec3& A, const Vec3& B, Vec3* outnormal = NULL );
+	float DistanceTestBBT( const Vec3& A, const Vec3& B );
 	
 	ltr_Config config;
 	

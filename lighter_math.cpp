@@ -854,7 +854,7 @@ float TriTree::IntersectRayDist( const Vec3& from, const Vec3& to, int32_t* outt
 {
 	ClosestHitRayQuery query( VDATA( m_tris ), from, to );
 	m_bbTree.RayQuery( query );
-	if( query.hitid != -1 )
+	if( query.hitid != -1 && outtid )
 	{
 		*outtid = query.hitid;
 	}
