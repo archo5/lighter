@@ -975,6 +975,7 @@ void ltr_Scene::Job_MainProc( LTRWorker::IO* io )
 			for( size_t lt_id = 0; lt_id < S->m_lights.size(); ++lt_id )
 			{
 				mesh_inst_ids.clear();
+				mesh_inst_ids.push_back( 0 ); // sample container
 				S->m_lights[ lt_id ].QueryMeshInsts( S->m_instTree, mesh_inst_ids );
 				std::sort( mesh_inst_ids.begin(), mesh_inst_ids.end() );
 				int32_t previd = -1;
