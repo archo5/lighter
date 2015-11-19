@@ -440,6 +440,15 @@ void BSPNode::Split( int depth )
 			back_node = new BSPNode;
 			for( size_t i = 0; i < triangles.size(); ++i )
 				AddTriangleSplit( &triangles[i] );
+			if( front_node->triangles.size() + back_node->triangles.size() > triangles.size() * 3 / 2 )
+			{
+				// split wasn't worth it, undo
+				delete front_node;
+				delete back_node;
+				front_node = NULL;
+				back_node = NULL;
+				return;
+			}
 			TriVector().swap( triangles );
 			front_node->Split( depth + 1 );
 			back_node->Split( depth + 1 );
@@ -473,10 +482,6 @@ void BSPNode::AddTriangleSplit( Triangle* tri )
 	float td31 = proj3 - proj1; // opposite signs expected, both must be 0 for diff to be 0
 	if( td31 )
 		S3 = TLERP( P3, P1, fabs( proj3 / td31 ) );
-	
-	static int wat = 0;
-	if( wat++ > 100000 )
-		puts( "TODO FIX LEAK" );
 	
 	front_node->triangles.push_back( *tri );
 	back_node->triangles.push_back( *tri );

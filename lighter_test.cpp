@@ -238,6 +238,55 @@ void testfunc_basic()
 	ltr_DestroyScene( scene );
 }
 
+void testfunc_hugeoverlap()
+{
+	puts( "LIGHTER test [hugeoverlap]" );
+	
+	ltr_Scene* scene = ltr_CreateScene();
+	
+	// MESH 1
+	ltr_Mesh* mesh1 = ltr_CreateMesh( scene, "mesh1", strlen("mesh1") );
+	
+	// MESH 1 PART 1
+	float m1_p1_positions[] = { -1, -1, 0,  1, -1, 0,  1, 1, 0,  -1, 1, 0 };
+	float m1_p1_normals[] = { 0, 0, 1,  0, 0, 1,  0, 0, 1,  0, 0, 1 };
+	float m1_p1_texcoords[] = { 0.1f, 0.1f,  0.9f, 0.1f,  0.9f, 0.9f,  0.1f, 0.9f };
+#define II 0, 1, 2,  2, 3, 0,
+	u32 m1_p1_indices[] = { II II II II II II II II II II II II II II II II };
+	ltr_MeshPartInfo m1part1 =
+	{
+		m1_p1_positions, m1_p1_normals, m1_p1_texcoords, m1_p1_texcoords,
+		sizeof(float)*3, sizeof(float)*3, sizeof(float)*2, sizeof(float)*2,
+		m1_p1_indices, 4, sizeof(m1_p1_indices) / sizeof(m1_p1_indices[0]), 1
+	};
+	LTR_VERIFY( ltr_MeshAddPart( mesh1, &m1part1 ) );
+	
+	// MESH 1 INSTANCE 1
+	ltr_MeshInstanceInfo m1inst1;
+	memset( &m1inst1, 0, sizeof(m1inst1) );
+	m1inst1.importance = 1;
+	m1inst1.shadow = 1;
+	float matrix1[16] = { 1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1 };
+	memcpy( m1inst1.matrix, matrix1, sizeof(matrix1) );
+	for( int i = 0; i < 10; ++i )
+	{
+		ltr_MeshAddInstance( mesh1, &m1inst1 );
+	}
+	
+	// LIGHTS
+	ltr_LightInfo lights[] =
+	{
+		{ LTR_LT_POINT, { -0.4f, -0.4f, 1 }, {0,0,0}, {0,0,0}, { 0.9f, 0.1f, 0.05f }, 4.0f, 1.0f, 0.1f, 9 },
+	};
+	for( size_t lt = 0; lt < sizeof(lights)/sizeof(lights[0]); ++lt )
+		ltr_LightAdd( scene, &lights[ lt ] );
+	
+	// --- DO WORK ---
+	DOWORK( scene );
+	
+	ltr_DestroyScene( scene );
+}
+
 void testfunc_mesh1()
 {
 	puts( "LIGHTER test [mesh1]" );
@@ -466,7 +515,14 @@ void testfunc_rad1()
 }
 
 
-const char* testname = "mesh2";
+void test_systems()
+{
+	testfunc_basic();
+	testfunc_hugeoverlap();
+}
+
+
+const char* testname = "test";
 
 int main( int argc, char* argv[] )
 {
@@ -481,6 +537,8 @@ int main( int argc, char* argv[] )
 		testfunc_mesh2();
 	else if( strcmp( testname, "rad1" ) == 0 )
 		testfunc_rad1();
+	else if( strcmp( testname, "test" ) == 0 )
+		test_systems();
 	else
 		printf( "TEST NOT FOUND: %s\n", testname );
 	
