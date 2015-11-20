@@ -659,7 +659,11 @@ struct _AABBTree_SortIndices
 	AABB3* aabbs;
 	Vec3 splitnrm;
 	
-	bool operator () ( int32_t idx_a, int32_t idx_b )
+	bool
+#ifdef __GNUC__
+	__attribute__ ((noinline)) // FFS, GCC!
+#endif
+	operator () ( int32_t idx_a, int32_t idx_b )
 	{
 		float dot_a = Vec3Dot( splitnrm, aabbs[ idx_a ].Center() );
 		float dot_b = Vec3Dot( splitnrm, aabbs[ idx_b ].Center() );
