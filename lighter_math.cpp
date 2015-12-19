@@ -990,7 +990,7 @@ float TriTree::GetDistance( const Vec3& p, float dist )
 
 struct SampleOffsetQuery
 {
-	SampleOffsetQuery( Triangle* ta, Vec3& p, Vec3 n, float d ) : tris( ta ), P( p ), N( n ), dist( d ){}
+	SampleOffsetQuery( TriTree* tt, Triangle* ta, Vec3& p, Vec3 n, float d ) : tree( tt ), tris( ta ), P( p ), N( n ), dist( d ){}
 	
 	void operator () ( int32_t* ids, int32_t count )
 	{
@@ -1019,7 +1019,10 @@ struct SampleOffsetQuery
 							float dotFactor = 1.0f - fabsf( projDot );
 						//	printf("dist: %f/%f, pen: %f, dot: %f, move: %f\n",ndst,dist,-sigdst,projDot,-sigdst / dotFactor);
 						//	printf("- pos:%g;%g;%g, nrm:%g;%g;%g\n", P.x,P.y,P.z,N.x,N.y,N.z);
-							P += projTPN * ( -sigdst / dotFactor + SMALL_FLOAT );
+							Vec3 Pnew = P + projTPN * ( -sigdst / dotFactor + SMALL_FLOAT );
+							int32_t tid = -1;
+							if( tree->IntersectRayDist( P + ( N + projTPN ) * SMALL_FLOAT, Pnew, &tid ) >= 0.9f || tid == ids[ i ] )
+								P = Pnew;
 						}
 					}
 				}
@@ -1027,6 +1030,7 @@ struct SampleOffsetQuery
 		}
 	}
 	
+	TriTree* tree;
 	Triangle* tris;
 	Vec3& P;
 	Vec3 N;
@@ -1035,7 +1039,7 @@ struct SampleOffsetQuery
 
 void TriTree::OffsetSample( Vec3& P, const Vec3& N, float dist )
 {
-	SampleOffsetQuery query( VDATA( m_tris ), P, N, dist );
+	SampleOffsetQuery query( this, VDATA( m_tris ), P, N, dist );
 	m_bbTree.Query( P - V3(dist), P + V3(dist), query );
 }
 
