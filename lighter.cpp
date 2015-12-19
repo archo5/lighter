@@ -440,10 +440,12 @@ void ltr_Scene::Job_Samples_Inner( ltr_Scene* S, ltr_MeshInstance* mi )
 			N = N.Normalized();
 			Vec3 P = R1[ i ];
 			Vec4 XD = R3[ i ];
-#if 1
+			
+			// move sample out of concave edges
 			for( size_t mid = 0; mid < S->m_meshInstances.size(); ++mid )
 				S->m_meshInstances[ mid ]->m_triTree.OffsetSample( P, N, sqrtf( XD.w ) );
-#else
+			
+			// move sample in front of overlapping faces
 			if( config.max_correct_dist )
 			{
 				int itsleft = 100;
@@ -453,7 +455,7 @@ void ltr_Scene::Job_Samples_Inner( ltr_Scene* S, ltr_MeshInstance* mi )
 				{
 					Vec3 hitnrm = {0,0,0};
 					float q = DistanceTest( P, PEnd, &hitnrm );
-					if( Vec3Dot( hitnrm, N ) < corr_min_dot )
+					if( -Vec3Dot( hitnrm, N ) < corr_min_dot )
 						break;
 					if( q < SMALL_FLOAT )
 						q = SMALL_FLOAT;
@@ -461,7 +463,7 @@ void ltr_Scene::Job_Samples_Inner( ltr_Scene* S, ltr_MeshInstance* mi )
 					md *= ( 1.0f - q );
 				}
 			}
-#endif
+			
 			mi->m_samples_pos.push_back( P );
 			mi->m_samples_nrm.push_back( N );
 			mi->m_samples_loc.push_back( i );
