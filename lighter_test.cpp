@@ -358,8 +358,9 @@ void testfunc_mesh2()
 	ltr_Config cfg;
 	ltr_GetConfig( &cfg, scene );
 	cfg.ao_distance = 2;
-	cfg.global_size_factor = 8;
-	cfg.blur_size = 1;
+//	cfg.ao_multiplier = 0.1f;
+	cfg.global_size_factor = 4;
+	cfg.blur_size = 0;
 //	cfg.ds2x = 1;
 	ltr_SetConfig( scene, &cfg );
 	

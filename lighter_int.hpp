@@ -814,6 +814,7 @@ struct TriTree
 	bool IntersectRay( const Vec3& from, const Vec3& to );
 	float IntersectRayDist( const Vec3& from, const Vec3& to, int32_t* outtid );
 	float GetDistance( const Vec3& p, float dist );
+	void OffsetSample( Vec3& P, const Vec3& N, float dist );
 	
 	AABBTree m_bbTree;
 	std::vector< Triangle > m_tris;
@@ -965,7 +966,7 @@ struct ltr_Scene
 	void Job_ColInfo_Inner( ltr_MeshInstance* mi );
 	static void Job_ColInfo( LTRWorker::IO* io );
 	
-	void Job_Samples_Inner( ltr_MeshInstance* mi );
+	void Job_Samples_Inner( ltr_Scene* S, ltr_MeshInstance* mi );
 	static void Job_Samples( LTRWorker::IO* io );
 	
 	void Job_LMRender_Point_Inner( size_t i, dw_lmrender_data* data );

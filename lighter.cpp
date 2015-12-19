@@ -389,7 +389,7 @@ void ltr_Scene::Job_ColInfo( LTRWorker::IO* io )
 	S->Job_ColInfo_Inner( S->m_meshInstances[ io->i ] );
 }
 
-void ltr_Scene::Job_Samples_Inner( ltr_MeshInstance* mi )
+void ltr_Scene::Job_Samples_Inner( ltr_Scene* S, ltr_MeshInstance* mi )
 {
 	float corr_min_dot = cosf( config.max_correct_angle / 180.0f * (float) M_PI );
 	if( mi->m_samplecont )
@@ -440,6 +440,10 @@ void ltr_Scene::Job_Samples_Inner( ltr_MeshInstance* mi )
 			N = N.Normalized();
 			Vec3 P = R1[ i ];
 			Vec4 XD = R3[ i ];
+#if 1
+			for( size_t mid = 0; mid < S->m_meshInstances.size(); ++mid )
+				S->m_meshInstances[ mid ]->m_triTree.OffsetSample( P, N, sqrtf( XD.w ) );
+#else
 			if( config.max_correct_dist )
 			{
 				int itsleft = 100;
@@ -457,6 +461,7 @@ void ltr_Scene::Job_Samples_Inner( ltr_MeshInstance* mi )
 					md *= ( 1.0f - q );
 				}
 			}
+#endif
 			mi->m_samples_pos.push_back( P );
 			mi->m_samples_nrm.push_back( N );
 			mi->m_samples_loc.push_back( i );
@@ -471,7 +476,7 @@ void ltr_Scene::Job_Samples_Inner( ltr_MeshInstance* mi )
 void ltr_Scene::Job_Samples( LTRWorker::IO* io )
 {
 	ltr_Scene* S = (ltr_Scene*) io->shared;
-	S->Job_Samples_Inner( S->m_meshInstances[ io->i ] );
+	S->Job_Samples_Inner( S, S->m_meshInstances[ io->i ] );
 }
 
 

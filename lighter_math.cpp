@@ -286,8 +286,8 @@ void RasterizeTriangle2D_x2_ex( Vec3* img1, Vec3* img2, Vec4* img3, i32 width, i
 			
 			float s = Vec2Cross( q, p1p3 ) / vcross;
 			float t = Vec2Cross( p1p2, q ) / vcross;
-			s = TMAX( TMIN( s, 1.0f - SMALL_FLOAT ), SMALL_FLOAT );
-			t = TMAX( TMIN( t, 1.0f - SMALL_FLOAT ), SMALL_FLOAT );
+			s = TMAX( TMIN( s, 1.0f ), 0.0f );
+			t = TMAX( TMIN( t, 1.0f ), 0.0f );
 			
 			Vec2 p = { (float) x, (float) y };
 			float pd1 = Vec2Dot( p, n1 ), pd2 = Vec2Dot( p, n2 ), pd3 = Vec2Dot( p, n3 );
@@ -912,6 +912,45 @@ static float PointTriangleDistance( const Vec3& pt, const Vec3& t0, const Vec3& 
 	return pd;
 }
 
+static bool PointProjOnTriangle( const Vec3& pt, const Vec3& t0, const Vec3& t1, const Vec3& t2 )
+{
+	// plane
+	Vec3 nrm = Vec3Cross( t1 - t0, t2 - t0 ).Normalized();
+	
+	// tangents
+	Vec3 tan0 = ( t1 - t0 ).Normalized();
+	Vec3 tan1 = ( t2 - t1 ).Normalized();
+	Vec3 tan2 = ( t0 - t2 ).Normalized();
+	
+	// bounds
+	float t0p = Vec3Dot( tan0, pt ), t0min = Vec3Dot( tan0, t0 ), t0max = Vec3Dot( tan0, t1 );
+	float t1p = Vec3Dot( tan1, pt ), t1min = Vec3Dot( tan1, t1 ), t1max = Vec3Dot( tan1, t2 );
+	float t2p = Vec3Dot( tan2, pt ), t2min = Vec3Dot( tan2, t2 ), t2max = Vec3Dot( tan2, t0 );
+	
+	// check corners
+	if( t0min - SMALL_FLOAT > t0p && t2max + SMALL_FLOAT < t2p ) return false;
+	if( t1min - SMALL_FLOAT > t1p && t0max + SMALL_FLOAT < t0p ) return false;
+	if( t2min - SMALL_FLOAT > t2p && t1max + SMALL_FLOAT < t1p ) return false;
+	
+	// edge normals
+	Vec3 en0 = Vec3Cross( t1 - t0, nrm ).Normalized();
+	Vec3 en1 = Vec3Cross( t2 - t1, nrm ).Normalized();
+	Vec3 en2 = Vec3Cross( t0 - t2, nrm ).Normalized();
+	
+	// signed distances from edges
+	float ptd0 = Vec3Dot( en0, pt ) - Vec3Dot( en0, t0 );
+	float ptd1 = Vec3Dot( en1, pt ) - Vec3Dot( en1, t1 );
+	float ptd2 = Vec3Dot( en2, pt ) - Vec3Dot( en2, t2 );
+	
+	// check edges
+	if( ptd0 > SMALL_FLOAT && t0p - SMALL_FLOAT > t0min && t0p + SMALL_FLOAT < t0max ) return false;
+	if( ptd1 > SMALL_FLOAT && t1p - SMALL_FLOAT > t1min && t1p + SMALL_FLOAT < t1max ) return false;
+	if( ptd2 > SMALL_FLOAT && t2p - SMALL_FLOAT > t2min && t2p + SMALL_FLOAT < t2max ) return false;
+	
+	// inside
+	return true;
+}
+
 struct DistanceBBQuery
 {
 	DistanceBBQuery( Triangle* ta, const Vec3& p, float d ) : pos( p ), dist( d ), tris( ta ){ RecalcBB(); }
@@ -947,6 +986,57 @@ float TriTree::GetDistance( const Vec3& p, float dist )
 	DistanceBBQuery query( VDATA( m_tris ), p, dist );
 	m_bbTree.DynBBQuery( query );
 	return query.dist;
+}
+
+struct SampleOffsetQuery
+{
+	SampleOffsetQuery( Triangle* ta, Vec3& p, Vec3 n, float d ) : tris( ta ), P( p ), N( n ), dist( d ){}
+	
+	void operator () ( int32_t* ids, int32_t count )
+	{
+		for( int32_t i = 0; i < count; ++i )
+		{
+			Triangle& T = tris[ ids[ i ] ];
+			float ndst = PointTriangleDistance( P, T.P1, T.P2, T.P3 );
+			if( ndst < dist )
+			{
+				Vec3 TPN = -T.GetNormal();
+				float TPD = Vec3Dot( TPN, T.P1 );
+				float sigdst = Vec3Dot( TPN, P ) - TPD;
+				if( sigdst <= SMALL_FLOAT )
+				{
+					// point behind plane
+					Vec3 Pextr = P + ( TPN + N ).Normalized() * -sigdst * 1.41f;
+					if( PointProjOnTriangle( Pextr, T.P1, T.P2, T.P3 ) )
+					{
+						// concave edge
+						float projDot = Vec3Dot( TPN, N );
+						if( fabsf( projDot ) < 0.95f )
+						{
+							// - project plane normal on surface
+							Vec3 projTPN = TPN - N * projDot;
+							projTPN = projTPN.Normalized();
+							float dotFactor = 1.0f - fabsf( projDot );
+						//	printf("dist: %f/%f, pen: %f, dot: %f, move: %f\n",ndst,dist,-sigdst,projDot,-sigdst / dotFactor);
+						//	printf("- pos:%g;%g;%g, nrm:%g;%g;%g\n", P.x,P.y,P.z,N.x,N.y,N.z);
+							P += projTPN * ( -sigdst / dotFactor + SMALL_FLOAT );
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	Triangle* tris;
+	Vec3& P;
+	Vec3 N;
+	float dist;
+};
+
+void TriTree::OffsetSample( Vec3& P, const Vec3& N, float dist )
+{
+	SampleOffsetQuery query( VDATA( m_tris ), P, N, dist );
+	m_bbTree.Query( P - V3(dist), P + V3(dist), query );
 }
 
 
