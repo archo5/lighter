@@ -108,7 +108,7 @@ struct testmesh
 };
 
 
-void dumpimg( const char* file, float* img_rgb, u32 width, u32 height, float top = 1.0f )
+void dumpimg( const char* file, float* img_rgb, u32 width, u32 height, float top = 1.0f, bool alpha = false )
 {
 	float mult = 255.0f / top;
 	
@@ -120,29 +120,47 @@ void dumpimg( const char* file, float* img_rgb, u32 width, u32 height, float top
 	}
 	unsigned char header[18]={0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 	
-    header[12] = width         & 0xFF;
-    header[13] = ( width >> 8)  & 0xFF;
-    header[14] = (height)       & 0xFF; 
-    header[15] = (height >> 8)  & 0xFF;
-    header[16] = 24;
-    
-    fwrite( header, 1, 18, fh );
-    for( u32 y = height; y > 0; )
-    {
-    	--y;
-    	for( u32 x = 0; x < width; ++x )
-    	{
-    		u32 off = ( x + width * y ) * 3;
-    		unsigned char btwr[3] =
-    		{
-    			(unsigned char) TMIN( img_rgb[ off+2 ] * mult, 255.0f ),
-    			(unsigned char) TMIN( img_rgb[ off+1 ] * mult, 255.0f ),
-    			(unsigned char) TMIN( img_rgb[ off+0 ] * mult, 255.0f )
-    		};
-    		fwrite( btwr, 1, 3, fh );
-    	}
-    }
-    fclose( fh );
+	header[12] = width         & 0xFF;
+	header[13] = ( width >> 8)  & 0xFF;
+	header[14] = (height)       & 0xFF;
+	header[15] = (height >> 8)  & 0xFF;
+	header[16] = alpha ? 32 : 24;
+	
+	fwrite( header, 1, 18, fh );
+	for( u32 y = height; y > 0; )
+	{
+		--y;
+		if( alpha )
+		{
+			for( u32 x = 0; x < width; ++x )
+			{
+				u32 off = ( x + width * y ) * 4;
+				unsigned char btwr[4] =
+				{
+					(unsigned char) TMIN( img_rgb[ off+2 ] * mult, 255.0f ),
+					(unsigned char) TMIN( img_rgb[ off+1 ] * mult, 255.0f ),
+					(unsigned char) TMIN( img_rgb[ off+0 ] * mult, 255.0f ),
+					(unsigned char) TMIN( img_rgb[ off+3 ] * mult, 255.0f ),
+				};
+				fwrite( btwr, 1, 4, fh );
+			}
+		}
+		else
+		{
+			for( u32 x = 0; x < width; ++x )
+			{
+				u32 off = ( x + width * y ) * 3;
+				unsigned char btwr[3] =
+				{
+					(unsigned char) TMIN( img_rgb[ off+2 ] * mult, 255.0f ),
+					(unsigned char) TMIN( img_rgb[ off+1 ] * mult, 255.0f ),
+					(unsigned char) TMIN( img_rgb[ off+0 ] * mult, 255.0f ),
+				};
+				fwrite( btwr, 1, 3, fh );
+			}
+		}
+	}
+	fclose( fh );
 }
 
 
@@ -362,6 +380,7 @@ void testfunc_mesh2()
 	cfg.global_size_factor = 4;
 	cfg.blur_size = 0;
 //	cfg.ds2x = 1;
+	cfg.generate_normalmap_data = 1;
 	ltr_SetConfig( scene, &cfg );
 	
 	// MESH 1
@@ -434,6 +453,15 @@ void testfunc_mesh2()
 		char namebfr[ 64 ];
 		sprintf( namebfr, "%d.tga", (int) wout.uid );
 		dumpimg( namebfr, wout.lightmap_rgb, wout.width, wout.height );
+		sprintf( namebfr, "%dN.tga", (int) wout.uid );
+		for( u32 px = 0; px < wout.width * wout.height; ++px )
+		{
+			int off = px * 4;
+			wout.normals_xyzf[ off + 0 ] = wout.normals_xyzf[ off + 0 ] * 0.5f + 0.5f;
+			wout.normals_xyzf[ off + 1 ] = wout.normals_xyzf[ off + 1 ] * 0.5f + 0.5f;
+			wout.normals_xyzf[ off + 2 ] = wout.normals_xyzf[ off + 2 ] * 0.5f + 0.5f;
+		}
+		dumpimg( namebfr, wout.normals_xyzf, wout.width, wout.height, 1.0f, true );
 	}
 	
 	ltr_DestroyScene( scene );

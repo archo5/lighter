@@ -183,6 +183,8 @@ typedef struct ltr_Config
 	float blur_size;
 	// DOWNSAMPLE 2X effect:
 	int ds2x;
+	// NORMAL/FOCUS data generation:
+	int generate_normalmap_data;
 }
 ltr_Config;
 
@@ -214,6 +216,7 @@ typedef struct ltr_WorkOutput
 	const char* inst_ident;
 	size_t inst_ident_size;
 	float* lightmap_rgb;
+	float* normals_xyzf;
 	u32 width;
 	u32 height;
 }

@@ -847,6 +847,20 @@ struct ltr_Mesh
 };
 typedef std::vector< ltr_Mesh* > MeshPtrVector;
 
+struct ltr_LightContribSample
+{
+	Vec3 normal;
+	int32_t sid;
+};
+typedef std::vector< ltr_LightContribSample > LightContribVector;
+
+struct ltr_TmpContribSum
+{
+	Vec3 normal;
+	float mindot;
+	int32_t count;
+};
+
 struct ltr_MeshInstance
 {
 	// input
@@ -873,6 +887,7 @@ struct ltr_MeshInstance
 	U32Vector m_samples_loc;
 	Vec4Vector m_samples_radinfo;
 	Vec3Vector m_lightmap;
+	LightContribVector m_contrib;
 };
 typedef std::vector< ltr_MeshInstance* > MeshInstPtrVector;
 
@@ -896,6 +911,7 @@ struct ltr_Light
 	std::vector< Vec3 > samples;
 };
 typedef std::vector< ltr_Light > LightVector;
+FORCEINLINE float CalcBrightness( Vec3 color ){ return ( color.x + color.y + color.z ) * (1.0f/3.0f); }
 
 typedef std::vector< ltr_SampleInfo > SampleVector;
 
@@ -925,6 +941,7 @@ typedef std::vector< ltr_RadLink > RadLinkVector;
 
 struct dw_lmrender_data
 {
+	std::vector<ltr_LightContribSample>* contribs;
 	ltr_MeshInstance* mi;
 	ltr_Light* light;
 	float angle_out_rad;
@@ -957,7 +974,11 @@ struct ltr_Scene
 		for( size_t i = 0; i < m_meshes.size(); ++i )
 			delete m_meshes[i];
 		for( size_t i = 0; i < m_workOutput.size(); ++i )
+		{
 			delete [] m_workOutput[i].lightmap_rgb;
+			if( m_workOutput[i].normals_xyzf )
+				delete [] m_workOutput[i].normals_xyzf;
+		}
 	}
 	
 	void Job_PreXForm_Inner( ltr_MeshInstance* mi );

@@ -502,6 +502,15 @@ void ltr_Scene::Job_LMRender_Point_Inner( size_t i, dw_lmrender_data* data )
 			return; // continue;
 		float f_vistest = CalcInvShadowFactor( SP + SN * SAMPLE_SHADOW_OFFSET, light.position, light.light_radius );
 		mi->m_lightmap[ i ] += light.color_rgb * ( f_dist * f_ndotl * f_vistest );
+		if( config.generate_normalmap_data )
+		{
+			float factor = f_dist * f_vistest * CalcBrightness( light.color_rgb );
+			if( factor > 0 )
+			{
+				ltr_LightContribSample contrib = { sample2light * factor, (int32_t) i };
+				(*data->contribs)[ i ] = contrib;
+			}
+		}
 	}
 }
 
@@ -531,6 +540,15 @@ void ltr_Scene::Job_LMRender_Spot_Inner( size_t i, dw_lmrender_data* data )
 			return; // continue;
 		float f_vistest = CalcInvShadowFactor( SP + SN * SAMPLE_SHADOW_OFFSET, light.position, light.light_radius );
 		mi->m_lightmap[ i ] += light.color_rgb * ( f_dist * f_ndotl * f_dir * f_vistest );
+		if( config.generate_normalmap_data )
+		{
+			float factor = f_dist * f_dir * f_vistest * CalcBrightness( light.color_rgb );
+			if( factor > 0 )
+			{
+				ltr_LightContribSample contrib = { sample2light * factor, (int32_t) i };
+				(*data->contribs)[ i ] = contrib;
+			}
+		}
 	}
 }
 
@@ -569,6 +587,15 @@ void ltr_Scene::Job_LMRender_Direct_Inner( size_t i, dw_lmrender_data* data )
 		float f_vistest = CalcInvShadowFactor( SP + SN * SAMPLE_SHADOW_OFFSET, SP + light.direction * light.range, light.light_radius );
 #endif
 		mi->m_lightmap[ i ] += light.color_rgb * ( f_ndotl * f_vistest );
+		if( config.generate_normalmap_data )
+		{
+			float factor = f_vistest * CalcBrightness( light.color_rgb );
+			if( factor > 0 )
+			{
+				ltr_LightContribSample contrib = { light.direction * factor, (int32_t) i };
+				(*data->contribs)[ i ] = contrib;
+			}
+		}
 	}
 }
 
@@ -595,9 +622,17 @@ void ltr_Scene::Job_LMRender_Direct( LTRWorker::IO* io )
 
 void ltr_Scene::Int_LMRender( ltr_Light& light, ltr_MeshInstance* mi )
 {
+	std::vector<ltr_LightContribSample> contribs;
+	if( config.generate_normalmap_data )
+	{
+		contribs.resize( mi->m_lightmap.size() );
+		ltr_LightContribSample nullsample = { V3(0), -1 };
+		TMEMSET( VDATA( contribs ), contribs.size(), nullsample );
+	}
+	
 	if( light.type == LTR_LT_POINT )
 	{
-		dw_lmrender_data data = { mi, &light };
+		dw_lmrender_data data = { &contribs, mi, &light };
 		
 		m_worker.DoWork( this, &data, 0, mi->m_lightmap.size(), ltr_Scene::Job_LMRender_Point );
 	}
@@ -607,15 +642,25 @@ void ltr_Scene::Int_LMRender( ltr_Light& light, ltr_MeshInstance* mi )
 		if( angle_in_rad == angle_out_rad )
 			angle_in_rad -= SMALL_FLOAT;
 		float angle_diff = angle_in_rad - angle_out_rad;
-		dw_lmrender_data data = { mi, &light, angle_out_rad, angle_in_rad, angle_diff };
+		dw_lmrender_data data = { &contribs, mi, &light, angle_out_rad, angle_in_rad, angle_diff };
 		
 		m_worker.DoWork( this, &data, 0, mi->m_lightmap.size(), ltr_Scene::Job_LMRender_Spot );
 	}
 	else if( light.type == LTR_LT_DIRECT )
 	{
-		dw_lmrender_data data = { mi, &light };
+		dw_lmrender_data data = { &contribs, mi, &light };
 		
 		m_worker.DoWork( this, &data, 0, mi->m_lightmap.size(), ltr_Scene::Job_LMRender_Direct );
+	}
+	
+	// commit contributions
+	if( config.generate_normalmap_data )
+	{
+		for( size_t i = 0; i < contribs.size(); ++i )
+		{
+			if( contribs[ i ].sid >= 0 )
+				mi->m_contrib.push_back( contribs[ i ] );
+		}
 	}
 }
 
@@ -929,6 +974,52 @@ void ltr_Scene::Int_Finalize()
 			mi->lm_height = hh;
 		}
 		
+		float* normals_xyzf = NULL;
+		if( config.generate_normalmap_data )
+		{
+			std::vector<ltr_TmpContribSum> contribs;
+			
+			// - prepare temp. data store
+			contribs.resize( mi->m_samples_loc.size() );
+			ltr_TmpContribSum tmpl = { V3(0), 1, 0 };
+			TMEMSET( VDATA( contribs ), contribs.size(), tmpl );
+			
+			// - gather contributions and average direction
+			for( size_t i = 0; i < mi->m_contrib.size(); ++i )
+			{
+				contribs[ mi->m_contrib[ i ].sid ].normal += mi->m_contrib[ i ].normal;
+				contribs[ mi->m_contrib[ i ].sid ].count++;
+			}
+			for( size_t i = 0; i < contribs.size(); ++i )
+			{
+				if( contribs[ i ].count > 0 )
+					contribs[ i ].normal /= contribs[ i ].count;
+			}
+			
+			// - calculate focus
+			for( size_t i = 0; i < mi->m_contrib.size(); ++i )
+			{
+				ltr_TmpContribSum& TCS = contribs[ mi->m_contrib[ i ].sid ];
+				Vec3 cn = mi->m_contrib[ i ].normal;
+				float dot = 1 - ( 1 - TMAX( Vec3Dot( TCS.normal.Normalized(), cn.Normalized() ), 0.0f ) ) / TMAX( TCS.normal.Length() / cn.Length(), 1.0f );
+				TCS.mindot = TMIN( TCS.mindot, dot );
+			}
+			
+			// - reorder data into a texture
+			normals_xyzf = new float[ mi->lm_width * mi->lm_height * 4 ];
+			TMEMSET( normals_xyzf, mi->lm_width * mi->lm_height * 4, 0.0f );
+			for( size_t i = 0; i < mi->m_samples_loc.size(); ++i )
+			{
+				ltr_TmpContribSum& TCS = contribs[ i ];
+				size_t loc = mi->m_samples_loc[ i ] * 4;
+				Vec3 N = TCS.normal.Normalized();
+				normals_xyzf[ loc + 0 ] = N.x;
+				normals_xyzf[ loc + 1 ] = N.y;
+				normals_xyzf[ loc + 2 ] = N.z;
+				normals_xyzf[ loc + 3 ] = TCS.mindot;
+			}
+		}
+		
 		ltr_WorkOutput wo =
 		{
 			mid,
@@ -937,6 +1028,7 @@ void ltr_Scene::Int_Finalize()
 			mi->m_ident.c_str(),
 			mi->m_ident.size(),
 			image_rgb,
+			normals_xyzf,
 			mi->lm_width,
 			mi->lm_height
 		};
@@ -1106,6 +1198,7 @@ void ltr_GetConfig( ltr_Config* cfg, ltr_Scene* opt_scene )
 	
 	cfg->blur_size = 0.5f;
 	cfg->ds2x = 0;
+	cfg->generate_normalmap_data = 0;
 }
 
 LTRCODE ltr_SetConfig( ltr_Scene* scene, ltr_Config* cfg )
@@ -1223,9 +1316,9 @@ void ltr_SampleAdd( ltr_Scene* scene, ltr_SampleInfo* si )
 	S.out_color[0] = 0;
 	S.out_color[1] = 0;
 	S.out_color[2] = 0;
-	scene->m_sampleMI.m_samples_pos.push_back( Vec3::CreateFromPtr( S.position ) );
-	scene->m_sampleMI.m_samples_nrm.push_back( Vec3::CreateFromPtr( S.normal ) );
-	scene->m_sampleMI.m_lightmap.push_back( Vec3::Create(0,0,0) );
+	scene->m_sampleMI.m_samples_pos.push_back( V3P( S.position ) );
+	scene->m_sampleMI.m_samples_nrm.push_back( V3P( S.normal ) );
+	scene->m_sampleMI.m_lightmap.push_back( V3(0) );
 	scene->m_samples.push_back( S );
 }
 
