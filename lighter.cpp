@@ -497,15 +497,15 @@ void ltr_Scene::Job_LMRender_Point_Inner( size_t i, dw_lmrender_data* data )
 		if( dist )
 			sample2light /= dist;
 		float f_dist = pow( 1 - TMIN( 1.0f, dist / light.range ), light.power );
-		float f_ndotl = config.generate_normalmap_data && !mi->m_samplecont ?
-			1 : TMAX( 0.0f, Vec3Dot( sample2light, SN ) );
+		float ndotl = TMAX( 0.0f, Vec3Dot( sample2light, SN ) );
+		float f_ndotl = config.generate_normalmap_data && !mi->m_samplecont ? ndotl > 0 : ndotl;
 		if( f_dist * f_ndotl <= 0 )
 			return; // continue;
 		float f_vistest = CalcInvShadowFactor( SP + SN * SAMPLE_SHADOW_OFFSET, light.position, light.light_radius );
 		mi->m_lightmap[ i ] += light.color_rgb * ( f_dist * f_ndotl * f_vistest );
-		if( config.generate_normalmap_data )
+		if( config.generate_normalmap_data && !mi->m_samplecont )
 		{
-			float factor = f_dist * f_vistest * CalcBrightness( light.color_rgb );
+			float factor = f_dist * f_vistest * f_ndotl * CalcBrightness( light.color_rgb );
 			if( factor > 0 )
 			{
 				ltr_LightContribSample contrib = { sample2light * factor, (int32_t) i };
@@ -533,8 +533,8 @@ void ltr_Scene::Job_LMRender_Spot_Inner( size_t i, dw_lmrender_data* data )
 		if( dist )
 			sample2light /= dist;
 		float f_dist = pow( 1 - TMIN( 1.0f, dist / light.range ), light.power );
-		float f_ndotl = config.generate_normalmap_data && !mi->m_samplecont ?
-			1 : TMAX( 0.0f, Vec3Dot( sample2light, SN ) );
+		float ndotl = TMAX( 0.0f, Vec3Dot( sample2light, SN ) );
+		float f_ndotl = config.generate_normalmap_data && !mi->m_samplecont ? ndotl > 0 : ndotl;
 		float angle = acosf( TMIN( 1.0f, Vec3Dot( sample2light, -light.direction ) ) );
 		float f_dir = TMAX( 0.0f, TMIN( 1.0f, ( angle - angle_out_rad ) / angle_diff ) );
 		f_dir = pow( f_dir, light.spot_curve );
@@ -542,9 +542,9 @@ void ltr_Scene::Job_LMRender_Spot_Inner( size_t i, dw_lmrender_data* data )
 			return; // continue;
 		float f_vistest = CalcInvShadowFactor( SP + SN * SAMPLE_SHADOW_OFFSET, light.position, light.light_radius );
 		mi->m_lightmap[ i ] += light.color_rgb * ( f_dist * f_ndotl * f_dir * f_vistest );
-		if( config.generate_normalmap_data )
+		if( config.generate_normalmap_data && !mi->m_samplecont )
 		{
-			float factor = f_dist * f_dir * f_vistest * CalcBrightness( light.color_rgb );
+			float factor = f_dist * f_dir * f_vistest * f_ndotl * CalcBrightness( light.color_rgb );
 			if( factor > 0 )
 			{
 				ltr_LightContribSample contrib = { sample2light * factor, (int32_t) i };
@@ -585,14 +585,14 @@ void ltr_Scene::Job_LMRender_Direct_Inner( size_t i, dw_lmrender_data* data )
 		f_vistest /= light.shadow_sample_count;
 		f_vistest = 1.0f - f_vistest;
 #else
-		float f_ndotl = config.generate_normalmap_data && !mi->m_samplecont ?
-			1 : TMAX( 0.0f, Vec3Dot( light.direction, SN ) );
+		float ndotl = TMAX( 0.0f, Vec3Dot( light.direction, SN ) );
+		float f_ndotl = config.generate_normalmap_data && !mi->m_samplecont ? ndotl > 0 : ndotl;
 		float f_vistest = CalcInvShadowFactor( SP + SN * SAMPLE_SHADOW_OFFSET, SP + light.direction * light.range, light.light_radius );
 #endif
 		mi->m_lightmap[ i ] += light.color_rgb * ( f_ndotl * f_vistest );
-		if( config.generate_normalmap_data )
+		if( config.generate_normalmap_data && !mi->m_samplecont )
 		{
-			float factor = f_vistest * CalcBrightness( light.color_rgb );
+			float factor = f_vistest * f_ndotl * CalcBrightness( light.color_rgb );
 			if( factor > 0 )
 			{
 				ltr_LightContribSample contrib = { light.direction * factor, (int32_t) i };
