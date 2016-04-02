@@ -497,8 +497,7 @@ void ltr_Scene::Job_LMRender_Point_Inner( size_t i, dw_lmrender_data* data )
 		if( dist )
 			sample2light /= dist;
 		float f_dist = pow( 1 - TMIN( 1.0f, dist / light.range ), light.power );
-		float ndotl = TMAX( 0.0f, Vec3Dot( sample2light, SN ) );
-		float f_ndotl = config.generate_normalmap_data && !mi->m_samplecont ? ndotl > 0 : ndotl;
+		float f_ndotl = TMAX( 0.0f, Vec3Dot( sample2light, SN ) );
 		if( f_dist * f_ndotl <= 0 )
 			return; // continue;
 		float f_vistest = CalcInvShadowFactor( SP + SN * SAMPLE_SHADOW_OFFSET, light.position, light.light_radius );
@@ -533,8 +532,7 @@ void ltr_Scene::Job_LMRender_Spot_Inner( size_t i, dw_lmrender_data* data )
 		if( dist )
 			sample2light /= dist;
 		float f_dist = pow( 1 - TMIN( 1.0f, dist / light.range ), light.power );
-		float ndotl = TMAX( 0.0f, Vec3Dot( sample2light, SN ) );
-		float f_ndotl = config.generate_normalmap_data && !mi->m_samplecont ? ndotl > 0 : ndotl;
+		float f_ndotl = TMAX( 0.0f, Vec3Dot( sample2light, SN ) );
 		float angle = acosf( TMIN( 1.0f, Vec3Dot( sample2light, -light.direction ) ) );
 		float f_dir = TMAX( 0.0f, TMIN( 1.0f, ( angle - angle_out_rad ) / angle_diff ) );
 		f_dir = pow( f_dir, light.spot_curve );
@@ -585,8 +583,7 @@ void ltr_Scene::Job_LMRender_Direct_Inner( size_t i, dw_lmrender_data* data )
 		f_vistest /= light.shadow_sample_count;
 		f_vistest = 1.0f - f_vistest;
 #else
-		float ndotl = TMAX( 0.0f, Vec3Dot( light.direction, SN ) );
-		float f_ndotl = config.generate_normalmap_data && !mi->m_samplecont ? ndotl > 0 : ndotl;
+		float f_ndotl = TMAX( 0.0f, Vec3Dot( light.direction, SN ) );
 		float f_vistest = CalcInvShadowFactor( SP + SN * SAMPLE_SHADOW_OFFSET, SP + light.direction * light.range, light.light_radius );
 #endif
 		mi->m_lightmap[ i ] += light.color_rgb * ( f_ndotl * f_vistest );
@@ -984,7 +981,7 @@ void ltr_Scene::Int_Finalize()
 			
 			// - prepare temp. data store
 			contribs.resize( mi->m_samples_loc.size() );
-			ltr_TmpContribSum tmpl = { V3(0), 0, 1 };
+			ltr_TmpContribSum tmpl = { V3(0), 1, 1 };
 			TMEMSET( VDATA( contribs ), contribs.size(), tmpl );
 			
 			// - load default contribution
@@ -997,7 +994,6 @@ void ltr_Scene::Int_Finalize()
 			{
 				ltr_TmpContribSum& TCS = contribs[ mi->m_contrib[ i ].sid ];
 				TCS.normal += mi->m_contrib[ i ].normal;
-				TCS.mindot = TMAX( TCS.mindot, TMIN( 1.0f, mi->m_contrib[ i ].normal.Length() ) );
 				TCS.count++;
 			}
 			for( size_t i = 0; i < contribs.size(); ++i )
@@ -1010,8 +1006,9 @@ void ltr_Scene::Int_Finalize()
 			{
 				ltr_TmpContribSum& TCS = contribs[ mi->m_contrib[ i ].sid ];
 				Vec3 cn = mi->m_contrib[ i ].normal;
-				float dot = 1 - ( 1 - TMAX( Vec3Dot( TCS.normal.Normalized(), cn.Normalized() ), 0.0f ) ) / TMAX( TCS.normal.Length() / cn.Length(), 1.0f );
-				TCS.mindot = TMIN( TCS.mindot, dot );
+				float dot = TMAX( Vec3Dot( TCS.normal.Normalized(), cn.Normalized() ), 0.0f );
+				dot = TLERP( 1.0f, dot, TMIN( cn.Length() / TCS.normal.Length(), 1.0f ) );
+				TCS.mindot *= dot;
 			}
 			
 			// - reorder data into a texture
