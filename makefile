@@ -1,14 +1,27 @@
 
 CFLAGS = -Wall -fno-exceptions -fno-rtti -static-libgcc -static-libstdc++ -DLTRBUILD -g -DLTRDEBUG -m32 -O1
+ifeq ($(OS),Windows_NT)
+	fnREMOVE_ALL = del /F /S /Q
+	fnFIX_PATH = $(subst /,\,$1)
+	TARGET_TEST = bin/lighter_test.exe
+	TARGET_LIB = bin/lighter.dll
+else
+	fnREMOVE_ALL = rm -rf
+	fnFIX_PATH = $1
+	TARGET_TEST = bin/lighter_test
+	TARGET_LIB = bin/liblighter.so
+	CFLAGS += -lpthread
+endif
 
-bin/lighter_test.exe: lighter_test.cpp lighter.h bin/lighter.dll
-	$(CXX) -o $@ lighter_test.cpp $(CFLAGS) bin/lighter.dll
+$(TARGET_TEST): lighter_test.cpp lighter.h $(TARGET_LIB)
+	$(CXX) -o $@ lighter_test.cpp $(CFLAGS) $(TARGET_LIB)
 
-bin/lighter.dll: lighter.cpp lighter_math.cpp lighter.h lighter_int.hpp
+$(TARGET_LIB): lighter.cpp lighter_math.cpp lighter.h lighter_int.hpp
 	$(CXX) -o $@ lighter.cpp lighter_math.cpp -shared $(CFLAGS)
 
 .PHONY: test clean
-test: bin/lighter_test.exe
-	bin/lighter_test.exe
+test: $(TARGET_TEST)
+	$(TARGET_TEST)
 clean:
-	del bin\lighter_test.exe bin\lighter.dll
+	-$(fnREMOVE_ALL) $(call fnFIX_PATH,$(TARGET_TEST) $(TARGET_LIB))
+

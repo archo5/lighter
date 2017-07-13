@@ -26,6 +26,7 @@
 #  define ltrthread_sleep( ms ) Sleep( (DWORD) ms )
 
 #  define ltrmutex_t CRITICAL_SECTION
+#  define ltrcondvar_t CONDITION_VARIABLE
 #  define ltrthread_t HANDLE
 #  define threadret_t DWORD __stdcall
 #  define threadarg_t void*
@@ -39,6 +40,11 @@
 #  define ltrmutex_destroy( M ) DeleteCriticalSection( &M )
 #  define ltrmutex_lock( M ) EnterCriticalSection( &M )
 #  define ltrmutex_unlock( M ) LeaveCriticalSection( &M )
+
+#  define ltrcondvar_init( CV ) InitializeConditionVariable( &(CV) )
+#  define ltrcondvar_destroy( CV )
+#  define ltrcondvar_sleep( CV, M ) SleepConditionVariableCS( &(CV), &(M), INFINITE )
+#  define ltrcondvar_wakeall( CV ) WakeAllConditionVariable( &(CV) )
 
 static int ltrnumcpus()
 {
@@ -67,6 +73,7 @@ static void ltrthread_sleep( uint32_t ms )
 }
 
 #  define ltrmutex_t pthread_mutex_t
+#  define ltrcondvar_t pthread_cond_t
 #  define ltrthread_t pthread_t
 #  define threadret_t void*
 #  define threadarg_t void*
@@ -80,6 +87,11 @@ static void ltrthread_sleep( uint32_t ms )
 #  define ltrmutex_destroy( M ) pthread_mutex_destroy( &M )
 #  define ltrmutex_lock( M ) pthread_mutex_lock( &M )
 #  define ltrmutex_unlock( M ) pthread_mutex_unlock( &M )
+
+#  define ltrcondvar_init( CV ) pthread_cond_init( &(CV), NULL )
+#  define ltrcondvar_destroy( CV ) pthread_cond_destroy( &(CV) )
+#  define ltrcondvar_sleep( CV, M ) pthread_cond_wait( &(CV), &(M) )
+#  define ltrcondvar_wakeall( CV ) pthread_cond_broadcast( &(CV) )
 
 static int ltrnumcpus()
 {
@@ -105,7 +117,7 @@ struct LTRMutex
 	~LTRMutex(){ ltrmutex_destroy( mutex ); }
 	void Lock(){ ltrmutex_lock( mutex ); }
 	void Unlock(){ ltrmutex_unlock( mutex ); }
-	void SleepCV( CONDITION_VARIABLE* cv ){ SleepConditionVariableCS( cv, &mutex, INFINITE ); }
+	void SleepCV( ltrcondvar_t* cv ){ ltrcondvar_sleep( *cv, mutex ); }
 	ltrmutex_t mutex;
 };
 struct LTRMutexLock
@@ -135,17 +147,19 @@ struct LTRWorker
 		m_workProc( NULL ),
 		m_exit( false )
 	{
-		InitializeConditionVariable( &m_hasWork );
-		InitializeConditionVariable( &m_hasDone );
+		ltrcondvar_init( m_hasWork );
+		ltrcondvar_init( m_hasDone );
 	}
 	~LTRWorker()
 	{
 		m_exit = true;
-		WakeAllConditionVariable( &m_hasWork );
+		ltrcondvar_wakeall( m_hasWork );
 		for( size_t i = 0; i < m_threads.size(); ++i )
 		{
 			ltrthread_join( m_threads[ i ] );
 		}
+		ltrcondvar_destroy( m_hasWork );
+		ltrcondvar_destroy( m_hasDone );
 	}
 	void Init( int nt = ltrnumcpus() )
 	{
@@ -189,8 +203,8 @@ struct LTRWorker
 		m_numDone = 0;
 		m_workProc = wp;
 		
+		ltrcondvar_wakeall( m_hasWork );
 		m_mutex.Unlock();
-		WakeAllConditionVariable( &m_hasWork );
 		if( stay )
 			WaitForEnd();
 	}
@@ -214,9 +228,7 @@ struct LTRWorker
 					continue; // there may be more work
 			}
 			
-			m_mutex.Unlock();
-			WakeAllConditionVariable( &m_hasDone );
-			m_mutex.Lock();
+			ltrcondvar_wakeall( m_hasDone );
 			
 			m_mutex.SleepCV( &m_hasWork );
 		}
@@ -241,8 +253,8 @@ struct LTRWorker
 	std::vector< ltrthread_t > m_threads;
 	LTRMutex m_mutex;
 	volatile bool m_exit;
-	CONDITION_VARIABLE m_hasWork;
-	CONDITION_VARIABLE m_hasDone;
+	ltrcondvar_t m_hasWork;
+	ltrcondvar_t m_hasDone;
 };
 
 
